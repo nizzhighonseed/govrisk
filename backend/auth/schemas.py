@@ -25,6 +25,8 @@ class UserResponse(BaseModel):
     department: Optional[str] = None
     designation: Optional[str] = None
     isActive: bool
+    isApproved: bool
+    mustChangePassword: bool
     createdAt: str
     updatedAt: str
     lastLogin: Optional[str] = None
@@ -65,8 +67,15 @@ class AdminUserCreate(BaseModel):
     role: str = Field(..., pattern="^(admin|officer|analyst|viewer)$")
     department: Optional[str] = None
     designation: Optional[str] = None
-    temporaryPassword: str = Field(..., min_length=6, max_length=128)
     isActive: bool = True
+    # NOTE: no temporaryPassword field. The server generates a
+    # cryptographically secure temporary password via `secrets` and returns it
+    # exactly once to the calling admin. Human-chosen or client-supplied
+    # temporary passwords are never accepted.
+
+
+class AdminCreateUserResponse(UserResponse):
+    temporaryPassword: str
 
 
 class AdminUserUpdate(BaseModel):
@@ -74,6 +83,10 @@ class AdminUserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     department: Optional[str] = None
     designation: Optional[str] = None
+
+
+class UserApprovalUpdate(BaseModel):
+    isApproved: bool
 
 
 class PasswordResetResponse(BaseModel):

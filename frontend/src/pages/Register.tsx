@@ -1,12 +1,10 @@
 import { useState, FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Eye, EyeOff, AlertCircle, Clock } from 'lucide-react';
 import { register } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 
 export default function Register() {
-  const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const [submittedEmail, setSubmittedEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,8 +39,10 @@ export default function Register() {
         department: department.trim() || undefined,
         designation: designation.trim() || undefined,
       });
-      setUser(data.user);
-      navigate('/', { replace: true });
+      // Self-registered accounts are PENDING administrator approval. They have
+      // no portfolio access until an admin approves them, so there is nothing
+      // to auto-login into - show the pending confirmation instead.
+      setSubmittedEmail(data.user?.email || email.trim());
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -73,6 +73,8 @@ export default function Register() {
             <p className="mt-4 text-sm leading-relaxed text-navy-300">
               Government officers, analysts, and stakeholders can register to access
               AI-powered risk monitoring for infrastructure projects across ministries.
+              New accounts are reviewed and approved by an administrator before access
+              is granted.
             </p>
           </div>
           <p className="text-xs text-navy-500">
@@ -99,12 +101,41 @@ export default function Register() {
               Register to access the GovRisk monitoring platform
             </p>
 
-            {error && (
-              <div className="mt-5 flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-                <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
-                <p className="text-sm text-red-300">{error}</p>
+            {submittedEmail ? (
+              <div className="mt-6">
+                <div className="flex items-start gap-3 rounded-2xl border border-blue-500/30 bg-blue-500/10 p-5">
+                  <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/20">
+                    <Clock size={18} className="text-blue-300" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">
+                      Registration submitted for approval
+                    </h3>
+                    <p className="mt-1.5 text-sm leading-relaxed text-navy-200">
+                      Your request for <span className="font-medium text-white">{submittedEmail}</span>{' '}
+                      has been received. An administrator must approve your account before
+                      you can sign in to the GovRisk portfolio.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  to="/login"
+                  className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-lg bg-blue-600 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+                >
+                  Return to sign in
+                </Link>
+                <p className="mt-3 text-center text-xs text-navy-400">
+                  You can sign in as soon as your account is approved.
+                </p>
               </div>
-            )}
+            ) : (
+              <>
+                {error && (
+                  <div className="mt-5 flex items-start gap-2.5 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
+                    <p className="text-sm text-red-300">{error}</p>
+                  </div>
+                )}
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
@@ -214,6 +245,8 @@ export default function Register() {
                 {loading ? 'Creating account...' : 'Create account'}
               </button>
             </form>
+              </>
+            )}
           </div>
 
           <p className="mt-6 text-center text-sm text-navy-300">

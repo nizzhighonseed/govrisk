@@ -325,6 +325,7 @@ class AiApiTestCase(unittest.TestCase):
         with AuthSessionLocal() as db:
             user = db.query(User).filter(User.email == email).first()
             user.role = "officer"
+            user.is_approved = True
             db.commit()
         return {"Authorization": f"Bearer {r.json()['accessToken']}"}
 

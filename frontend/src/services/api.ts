@@ -85,7 +85,11 @@ export async function login(email: string, password: string) {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
-  setTokens(data.accessToken, data.refreshToken);
+  // Pending accounts must not start a portfolio session until an admin
+  // approves them - the server gates access anyway, so keep no tokens locally.
+  if (data.user.isApproved !== false) {
+    setTokens(data.accessToken, data.refreshToken);
+  }
   return data;
 }
 
@@ -96,12 +100,13 @@ export async function register(payload: {
   department?: string;
   designation?: string;
 }) {
-  const data = await apiFetch<{ accessToken: string; refreshToken: string; user: any }>('/api/auth/register', {
+  // Self-registration creates a PENDING account. Tokens returned by the server
+  // are gated behind admin approval (403 until approved), so they are never
+  // stored locally and no session is started.
+  return apiFetch<{ accessToken: string; refreshToken: string; user: any }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-  setTokens(data.accessToken, data.refreshToken);
-  return data;
 }
 
 export async function getMe() {
@@ -135,6 +140,7 @@ export interface UserListParams {
   role?: string;
   status?: string;
   department?: string;
+  approval?: string;
   page?: number;
   limit?: number;
 }
@@ -152,6 +158,7 @@ export function getUsers(params: UserListParams = {}) {
   if (params.search) query.set('search', params.search);
   if (params.role) query.set('role', params.role);
   if (params.status) query.set('status', params.status);
+  if (params.approval) query.set('approval', params.approval);
   if (params.department) query.set('department', params.department);
   if (params.page) query.set('page', String(params.page));
   if (params.limit) query.set('limit', String(params.limit));
@@ -169,10 +176,11 @@ export function createUser(data: {
   role: string;
   department?: string;
   designation?: string;
-  temporaryPassword: string;
   isActive: boolean;
 }) {
-  return apiFetch<any>('/api/users', { method: 'POST', body: JSON.stringify(data) });
+  // The temporary password is generated server-side (CSPRNG) and returned in
+  // the response exactly once; nothing password-related is sent by the client.
+  return apiFetch<{ message?: string } & Record<string, any>>('/api/users', { method: 'POST', body: JSON.stringify(data) });
 }
 
 export function adminUpdateUser(id: string, data: { fullName?: string; email?: string; department?: string; designation?: string }) {
@@ -185,6 +193,10 @@ export function updateUserRole(id: string, role: string) {
 
 export function updateUserStatus(id: string, isActive: boolean) {
   return apiFetch<any>(`/api/users/${id}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) });
+}
+
+export function updateUserApproval(id: string, isApproved: boolean) {
+  return apiFetch<any>(`/api/users/${id}/approval`, { method: 'PATCH', body: JSON.stringify({ isApproved }) });
 }
 
 export function resetUserPassword(id: string) {

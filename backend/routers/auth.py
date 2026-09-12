@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from auth.database import get_auth_db
 from auth.models import User
@@ -8,24 +8,75 @@ from auth.schemas import (
     TokenRefresh,
 )
 from auth.security import (
-    generate_id, hash_password, verify_password,
+    DUMMY_PASSWORD_HASH, generate_id, hash_password, safe_verify_password,
     create_access_token, create_refresh_token, decode_token,
 )
-from auth.dependencies import get_current_user
+import auth.lockout as lockout
+import auth.rate_limit as rate_limit
+from auth.dependencies import get_current_user_changing_password
 from auth.serializers import user_to_response
 from auth.audit import log_audit, next_user_id, ACTIONS
+
+GENERIC_AUTH_ERROR = "Invalid email or password"
+GENERIC_LOCK_MESSAGE = rate_limit.GENERIC_LIMIT_MESSAGE
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+def _pending_placeholder_response(email: str) -> AuthResponse:
+    """Byte-identical-looking registration response for a duplicate email.
+
+    Returning the same 201 shape (no 409, no "email already exists") means the
+    public registration endpoint does not betray whether a mailbox already has
+    an account. The tokens reference a random, non-existent subject so they are
+    unusable - they exist only to keep the response indistinguishable from a
+    genuine pending registration. The submitted email is echoed back because it
+    is the caller's own input.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    user = UserResponse(
+        id="",
+        userId="",
+        fullName="Pending User",
+        email=email,
+        role="viewer",
+        department=None,
+        designation=None,
+        isActive=True,
+        isApproved=False,
+        mustChangePassword=False,
+        createdAt=now,
+        updatedAt=now,
+        lastLogin=None,
+    )
+    phantom = f"pending-{generate_id()}"
+    return AuthResponse(
+        accessToken=create_access_token(phantom, "viewer"),
+        refreshToken=create_refresh_token(phantom),
+        user=user,
+    )
+
+
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-def register(data: UserRegister, db: Session = Depends(get_auth_db)):
+def register(data: UserRegister, request: Request, db: Session = Depends(get_auth_db)):
+    try:
+        rate_limit.enforce(
+            request,
+            f"register:ip:{rate_limit.client_ip(request)}",
+        )
+    except HTTPException as exc:
+        log_audit(
+            db, None, ACTIONS["RATE_LIMITED"],
+            details="Account registration rejected: rate limit exceeded",
+        )
+        db.commit()
+        raise exc
+
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
-        )
+        # No account-enumeration oracle: act as though the registration was
+        # accepted, identical to a real pending submission.
+        return _pending_placeholder_response(data.email)
 
     user = User(
         id=generate_id(),
@@ -37,6 +88,12 @@ def register(data: UserRegister, db: Session = Depends(get_auth_db)):
         department=data.department,
         designation=data.designation,
         is_active=True,
+        # Self-registration never grants portfolio access until an admin
+        # explicitly approves the account.
+        is_approved=False,
+        # Self-registered users chose their own password, so they are never
+        # forced through the temporary-password change flow.
+        must_change_password=False,
     )
     db.add(user)
     db.flush()
@@ -61,22 +118,75 @@ def register(data: UserRegister, db: Session = Depends(get_auth_db)):
 
 
 @router.post("/login", response_model=AuthResponse)
-def login(data: UserLogin, db: Session = Depends(get_auth_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.password_hash):
-        if user:
+def login(data: UserLogin, request: Request, db: Session = Depends(get_auth_db)):
+    email = data.email.strip().lower()
+    now = lockout.utcnow_naive()
+    user = db.query(User).filter(User.email == email).first()
+
+    # Request-level throttle FIRST: per client IP and per normalized email,
+    # covering unknown accounts too (defends against password spraying and
+    # against hammering a single email from many IPs).
+    try:
+        rate_limit.enforce(
+            request,
+            f"login:ip:{rate_limit.client_ip(request)}",
+            f"login:email:{rate_limit.hash_key(email)}",
+        )
+    except HTTPException as exc:
+        if user is not None:
             log_audit(
-                db,
-                user,
-                ACTIONS["LOGIN_FAILED"],
+                db, user, ACTIONS["LOGIN_FAILED"],
                 target_user_id=user.user_id,
-                details="Failed login attempt (invalid password)",
+                details="Login rejected: request rate limit exceeded",
             )
-            db.commit()
+        db.commit()
+        raise exc
+
+    # Temporary account lockout (persisted on the user row). Correct
+    # passwords are also rejected while locked so a lockout can never be
+    # bypassed by simply waiting for the right credential.
+    if user is not None and lockout.is_locked(user, now):
+        log_audit(
+            db, user, ACTIONS["LOGIN_FAILED"],
+            target_user_id=user.user_id,
+            details="Login rejected: account temporarily locked",
+        )
+        db.commit()
+        retry_after = max(1, int((user.locked_until - now).total_seconds()))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=GENERIC_LOCK_MESSAGE,
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    if user is None:
+        # Burn the same bcrypt cost as a real account so timing does not
+        # reveal whether the email exists.
+        safe_verify_password(data.password, DUMMY_PASSWORD_HASH)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail=GENERIC_AUTH_ERROR,
         )
+
+    if not safe_verify_password(data.password, user.password_hash):
+        newly_locked = lockout.register_failed_attempt(db, user, now)
+        log_audit(
+            db, user, ACTIONS["LOGIN_FAILED"],
+            target_user_id=user.user_id,
+            details="Failed login attempt (invalid password)",
+        )
+        if newly_locked:
+            log_audit(
+                db, user, ACTIONS["ACCOUNT_LOCKED"],
+                target_user_id=user.user_id,
+                details="Account temporarily locked after repeated failures",
+            )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=GENERIC_AUTH_ERROR,
+        )
+
     if not user.is_active:
         log_audit(
             db,
@@ -91,6 +201,7 @@ def login(data: UserLogin, db: Session = Depends(get_auth_db)):
             detail="Account is deactivated",
         )
 
+    lockout.clear_failed_attempts(db, user)
     user.last_login = datetime.now(timezone.utc)
     log_audit(db, user, ACTIONS["LOGIN_SUCCESS"], target_user_id=user.user_id, details="Successful login")
     db.commit()
@@ -106,7 +217,21 @@ def login(data: UserLogin, db: Session = Depends(get_auth_db)):
 
 
 @router.post("/refresh", response_model=AuthResponse)
-def refresh_token(data: TokenRefresh, db: Session = Depends(get_auth_db)):
+def refresh_token(data: TokenRefresh, request: Request, db: Session = Depends(get_auth_db)):
+    try:
+        rate_limit.enforce(
+            request,
+            f"refresh:ip:{rate_limit.client_ip(request)}",
+            f"refresh:token:{rate_limit.hash_key(data.refreshToken)}",
+        )
+    except HTTPException as exc:
+        log_audit(
+            db, None, ACTIONS["RATE_LIMITED"],
+            details="Token refresh rejected: rate limit exceeded",
+        )
+        db.commit()
+        raise exc
+
     payload = decode_token(data.refreshToken)
     if payload is None or payload.get("type") != "refresh":
         raise HTTPException(
@@ -139,7 +264,7 @@ def refresh_token(data: TokenRefresh, db: Session = Depends(get_auth_db)):
 
 @router.post("/logout")
 def logout(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_changing_password),
     db: Session = Depends(get_auth_db),
 ):
     log_audit(db, user, ACTIONS["LOGOUT"], target_user_id=user.user_id, details="Logged out")
@@ -148,5 +273,10 @@ def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(user: User = Depends(get_current_user)):
+def get_me(user: User = Depends(get_current_user_changing_password)):
+    # Uses the password-change-permitting dependency so an account flagged
+    # must_change_password can still bootstrap its session/profile and be
+    # redirected to the first-login change flow. Identity endpoints never
+    # bypass the active/approved gates, and the must-change requirement is
+    # still enforced on every portfolio and action endpoint.
     return user_to_response(user)

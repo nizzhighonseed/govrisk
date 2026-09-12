@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, AlertCircle, Lock, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Clock, Lock, ShieldCheck } from 'lucide-react';
 import { login } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import LandmarkSlider from '../components/hero/LandmarkSlider';
@@ -19,12 +19,14 @@ export default function Login() {
   const [showHelp, setShowHelp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pending, setPending] = useState('');
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setPending('');
     if (!email.trim() || !password) {
       setError('Please enter both email and password to continue.');
       return;
@@ -32,7 +34,18 @@ export default function Login() {
     setLoading(true);
     try {
       const data = await login(email.trim(), password);
+      if (data.user?.isApproved === false) {
+        setError('');
+        setPending(`Your account is awaiting administrator approval. You will be able to sign in once it is approved.`);
+        return;
+      }
       setUser(data.user);
+      // Accounts with an outstanding temporary password must choose a
+      // permanent password before they can use the portfolio.
+      if (data.user?.mustChangePassword) {
+        navigate('/change-password', { replace: true });
+        return;
+      }
       navigate(from, { replace: true });
     } catch (err: any) {
       setError(err.message || 'Sign in failed. Please verify your credentials and try again.');
@@ -119,6 +132,16 @@ export default function Login() {
               >
                 <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-700" />
                 <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {pending && (
+              <div
+                role="status"
+                className="mt-4 flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 p-3"
+              >
+                <Clock size={16} className="mt-0.5 shrink-0 text-amber-700" />
+                <p className="text-sm text-amber-800">{pending}</p>
               </div>
             )}
 

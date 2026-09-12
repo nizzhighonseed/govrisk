@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { Send } from 'lucide-react';
 
 interface AIChatProps {
@@ -9,10 +9,34 @@ interface AIChatProps {
   isTyping?: boolean;
 }
 
-function formatAssistantContent(content: string) {
-  return content
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br />');
+function renderBold(line: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const boldPattern = /\*\*(.+?)\*\*/g;
+  let lastIndex = 0;
+  let key = 0;
+  let match = boldPattern.exec(line);
+  while (match) {
+    if (match.index > lastIndex) {
+      parts.push(line.slice(lastIndex, match.index));
+    }
+    parts.push(<strong key={key++}>{match[1]}</strong>);
+    lastIndex = match.index + match[0].length;
+    match = boldPattern.exec(line);
+  }
+  if (lastIndex < line.length) {
+    parts.push(line.slice(lastIndex));
+  }
+  return parts;
+}
+
+function formatAssistantContent(content: string): ReactNode {
+  const lines = content.split('\n');
+  return lines.map((line, lineIndex) => (
+    <Fragment key={lineIndex}>
+      {lineIndex > 0 && <br />}
+      {renderBold(line)}
+    </Fragment>
+  ));
 }
 
 export function AIChat({
@@ -60,24 +84,26 @@ export function AIChat({
           </div>
         ) : (
           <>
-            {messages.map((message) =>
-              message.role === 'user' ? (
-                <div
-                  key={message.id}
-                  className="ml-auto max-w-[80%] bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-3 text-sm"
-                >
-                  {message.content}
-                </div>
-              ) : (
+            {messages.map((message) => {
+              if (message.role === 'user') {
+                return (
+                  <div
+                    key={message.id}
+                    className="ml-auto max-w-[80%] bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-3 text-sm"
+                  >
+                    {message.content}
+                  </div>
+                );
+              }
+              return (
                 <div
                   key={message.id}
                   className="max-w-[80%] bg-gray-100 text-navy-900 rounded-2xl rounded-bl-md px-4 py-3 text-sm"
-                  dangerouslySetInnerHTML={{
-                    __html: formatAssistantContent(message.content),
-                  }}
-                />
-              )
-            )}
+                >
+                  {formatAssistantContent(message.content)}
+                </div>
+              );
+            })}
             {isTyping && (
               <div className="max-w-[80%] bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3 text-sm">
                 <div className="flex items-center gap-1">

@@ -18,6 +18,16 @@ from sqlalchemy.orm import Session
 
 from models import Project
 from services import risk_config as CFG
+from services.text_guard import strip_html_tags
+
+
+def _safe_text(value) -> str:
+    """User-controlled text for assistant replies, stripped of HTML tags.
+
+    The frontend renders replies as text (primary trust boundary); this is
+    defense in depth so the backend can never emit executable markup.
+    """
+    return strip_html_tags(value)
 
 
 # --------------------------------------------------------------------------
@@ -1121,7 +1131,7 @@ def generate_assistant_response(query: str, db: Session) -> str:
         for i, p in enumerate(flagged[:4], 1):
             cost_overrun = round((p.current_cost - p.original_cost) / p.original_cost * 100, 1) if p.original_cost else 0
             lines.append(
-                f"{i}. **{p.name}** ({p.state}) — Risk Score: {p.risk_score}/100\n"
+                f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — Risk Score: {p.risk_score}/100\n"
                 f"   - Delay Probability: {p.delay_probability}% | Cost Overrun: {cost_overrun}%\n"
                 f"   - Status: {p.risk_level}"
             )
@@ -1137,7 +1147,7 @@ def generate_assistant_response(query: str, db: Session) -> str:
         for i, p in enumerate(sorted_projects[:4], 1):
             cost_overrun = round((p.current_cost - p.original_cost) / p.original_cost * 100, 1) if p.original_cost else 0
             lines.append(
-                f"{i}. **{p.name}** ({p.state}) — Risk Score: {p.risk_score}/100\n"
+                f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — Risk Score: {p.risk_score}/100\n"
                 f"   - Delay Probability: {p.delay_probability}%\n"
                 f"   - Cost Overrun: {cost_overrun}%\n"
                 f"   - Status: {p.risk_level}"
@@ -1153,7 +1163,7 @@ def generate_assistant_response(query: str, db: Session) -> str:
         delayed.sort(key=lambda p: p.delay_probability, reverse=True)
         lines = ["The following projects have a **delay probability above 50%** and require attention:"]
         for i, p in enumerate(delayed, 1):
-            lines.append(f"{i}. **{p.name}** ({p.state}) — {p.delay_probability}% delay probability")
+            lines.append(f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — {p.delay_probability}% delay probability")
         return "\n".join(lines)
 
     if "cost" in lower or "overrun" in lower:
@@ -1166,7 +1176,7 @@ def generate_assistant_response(query: str, db: Session) -> str:
         for i, p in enumerate(sorted_by_cost, 1):
             overrun = round((p.current_cost - p.original_cost) / p.original_cost * 100, 1) if p.original_cost else 0.0
             lines.append(
-                f"{i}. **{p.name}** — {overrun}% overrun\n"
+                f"{i}. **{_safe_text(p.name)}** — {overrun}% overrun\n"
                 f"   - Original: ₹{p.original_cost:,.0f} Cr | Current: ₹{p.current_cost:,.0f} Cr"
             )
         return "\n".join(lines)
@@ -1175,7 +1185,7 @@ def generate_assistant_response(query: str, db: Session) -> str:
         analytics = get_project_analytics(db)
         lines = ["Here is a comparative analysis of risk across sectors:"]
         for s in analytics["sectorAnalytics"]:
-            lines.append(f"- **{s['sector']}**: {s['projectCount']} projects, Avg Risk: {s['avgRisk']}, Avg Cost Overrun: {s['avgCostOverrun']}%")
+            lines.append(f"- **{_safe_text(s['sector'])}**: {s['projectCount']} projects, Avg Risk: {s['avgRisk']}, Avg Cost Overrun: {s['avgCostOverrun']}%")
         return "\n".join(lines)
 
     if "risk driver" in lower or "major risk" in lower:

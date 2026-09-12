@@ -117,6 +117,47 @@ def run_migrations(engine: Engine) -> None:
     _backfill_risk(engine)
 
 
+AUTH_USER_COLUMNS = {
+    "failed_login_count": "INTEGER NOT NULL DEFAULT 0",
+    "last_failed_login": "DATETIME",
+    "locked_until": "DATETIME",
+    # Registration governance: existing accounts are treated as approved so
+    # the migration cannot lock out current legitimate/demo users. Pending
+    # state is only introduced for NEW self-registrations (set explicitly
+    # to 0 by the register endpoint).
+    "is_approved": "BOOLEAN NOT NULL DEFAULT 1",
+    # Temporary-password enforcement: default 0 so existing users are never
+    # forced to change a password; only admin-created/reset accounts are
+    # marked (set explicitly to 1 by those endpoints).
+    "must_change_password": "BOOLEAN NOT NULL DEFAULT 0",
+}
+
+
+def run_auth_migrations(auth_engine: Engine) -> None:
+    """Idempotently add brute-force lockout columns to the auth users table.
+
+    create_all() never adds columns to existing tables, so databases created
+    before the lockout feature ships need these added exactly once.
+    """
+    try:
+        with auth_engine.connect() as conn:
+            existing = {
+                row[1]
+                for row in conn.execute(text("PRAGMA table_info(users)"))
+            }
+            for column, ddl in AUTH_USER_COLUMNS.items():
+                if column not in existing:
+                    conn.execute(
+                        text(f"ALTER TABLE users ADD COLUMN {column} {ddl}")
+                    )
+            conn.commit()
+    except Exception:
+        # users table may not exist yet (fresh auth.db); create_all in
+        # main.py creates it from the model definition, which already
+        # carries these columns.
+        pass
+
+
 def _backfill_risk(engine: Engine) -> None:
     """Recompute cached risk columns for existing rows using the risk engine.
 

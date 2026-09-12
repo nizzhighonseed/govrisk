@@ -37,6 +37,7 @@ import {
   adminUpdateUser,
   updateUserRole,
   updateUserStatus,
+  updateUserApproval,
   resetUserPassword,
   getAuditLogs,
   getProjects,
@@ -54,6 +55,7 @@ interface User {
   department?: string;
   designation?: string;
   isActive: boolean;
+  isApproved?: boolean;
   createdAt?: string;
   updatedAt?: string;
   lastLogin?: string;
@@ -206,6 +208,7 @@ export default function AdminPanel() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [approvalFilter, setApprovalFilter] = useState('');
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRef = useRef(search);
 
@@ -229,7 +232,6 @@ export default function AdminPanel() {
     department: '',
     designation: '',
     role: 'viewer',
-    temporaryPassword: '',
     isActive: true,
   });
   const [createError, setCreateError] = useState('');
@@ -270,6 +272,7 @@ export default function AdminPanel() {
       if (searchRef.current) params.search = searchRef.current;
       if (roleFilter) params.role = roleFilter;
       if (statusFilter) params.status = statusFilter;
+      if (approvalFilter) params.approval = approvalFilter;
       const res = await getUsers(params as any);
       setUsers(res.items);
       setUsersTotalPages(res.totalPages);
@@ -279,7 +282,7 @@ export default function AdminPanel() {
     } finally {
       setUsersLoading(false);
     }
-  }, [usersPage, roleFilter, statusFilter]);
+  }, [usersPage, roleFilter, statusFilter, approvalFilter]);
 
   const fetchLogs = useCallback(async () => {
     setLogsLoading(true);
@@ -377,7 +380,6 @@ export default function AdminPanel() {
       department: '',
       designation: '',
       role: 'viewer',
-      temporaryPassword: '',
       isActive: true,
     });
     setCreateError('');
@@ -392,16 +394,16 @@ export default function AdminPanel() {
     if (!f.fullName.trim()) { setCreateError('Full name is required'); return; }
     if (!f.email.trim()) { setCreateError('Email is required'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) { setCreateError('Invalid email format'); return; }
-    if (f.temporaryPassword.length < 6) { setCreateError('Password must be at least 6 characters'); return; }
     setCreateSaving(true);
     try {
+      // The server generates the temporary password (CSPRNG) and returns it
+      // exactly once in the response - the browser never invents one.
       const created = await createUser({
         fullName: f.fullName.trim(),
         email: f.email.trim(),
         role: f.role,
         department: f.department.trim() || undefined,
         designation: f.designation.trim() || undefined,
-        temporaryPassword: f.temporaryPassword,
         isActive: f.isActive,
       });
       setCreatedUser({
@@ -409,7 +411,7 @@ export default function AdminPanel() {
         fullName: created.fullName,
         email: created.email,
         role: created.role,
-        temporaryPassword: f.temporaryPassword,
+        temporaryPassword: created.temporaryPassword,
       });
       setCreateStep('success');
       refreshAll();
@@ -485,6 +487,23 @@ export default function AdminPanel() {
       refreshAll();
     } catch (e: any) {
       alert(e.message || 'Failed to update status');
+    }
+  }
+
+  async function handleApprovalToggle(u: User) {
+    if (u.id === currentUser?.id) return;
+    const approve = u.isApproved === false;
+    const confirmed = window.confirm(
+      approve
+        ? `Approve ${u.fullName}? They will gain portfolio access.`
+        : `Revoke approval for ${u.fullName}? They will immediately lose portfolio access.`
+    );
+    if (!confirmed) return;
+    try {
+      await updateUserApproval(u.id, approve);
+      refreshAll();
+    } catch (e: any) {
+      alert(e.message || 'Failed to update approval');
     }
   }
 
@@ -919,6 +938,15 @@ export default function AdminPanel() {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
+          <select
+            value={approvalFilter}
+            onChange={(e) => { setApprovalFilter(e.target.value); setUsersPage(1); }}
+            className="h-11 rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+          >
+            <option value="">All Approvals</option>
+            <option value="pending">Pending Approval</option>
+            <option value="approved">Approved</option>
+          </select>
         </div>
 
         {usersLoading ? (
@@ -988,26 +1016,53 @@ export default function AdminPanel() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${u.isActive ? 'bg-green-50 text-green-700 ring-green-200' : 'bg-gray-100 text-gray-600 ring-gray-200'}`}>
-                          {u.isActive ? 'Active' : 'Inactive'}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${u.isActive ? 'bg-green-50 text-green-700 ring-green-200' : 'bg-gray-100 text-gray-600 ring-gray-200'}`}>
+                            {u.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                          {u.isApproved === false && (
+                            <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                              Pending approval
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 xl:table-cell">{formatDate(u.createdAt)}</td>
                       <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-gray-600 xl:table-cell">{formatDate(u.lastLogin)}</td>
                       <td className="whitespace-nowrap px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5">
+                          {u.isApproved === false && u.id !== currentUser?.id && (
+                            <button
+                              onClick={() => handleApprovalToggle(u)}
+                              className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-500"
+                              title="Approve this account"
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {u.isApproved !== false && u.id !== currentUser?.id && (
+                            <button
+                              onClick={() => handleApprovalToggle(u)}
+                              className="rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                              title="Revoke portfolio access for this account"
+                            >
+                              Revoke
+                            </button>
+                          )}
                           <button
                             onClick={() => openEdit(u)}
                             className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-navy-900 hover:bg-gray-50"
                           >
                             Edit
                           </button>
-                          <button
-                            onClick={() => handleResetPassword(u)}
-                            className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-navy-900 hover:bg-gray-50"
-                          >
-                            Reset Pwd
-                          </button>
+                          {u.isApproved !== false && (
+                            <button
+                              onClick={() => handleResetPassword(u)}
+                              className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-navy-900 hover:bg-gray-50"
+                            >
+                              Reset Pwd
+                            </button>
+                          )}
                           {u.id !== currentUser?.id && (
                             <button
                               onClick={() => handleStatusToggle(u)}
@@ -1284,14 +1339,12 @@ export default function AdminPanel() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Temporary Password *</label>
-                <input
-                  type="text"
-                  value={createForm.temporaryPassword}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, temporaryPassword: e.target.value }))}
-                  className="h-11 w-full rounded-lg border border-gray-200 bg-white px-3.5 text-sm text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="Min 6 characters"
-                />
+                <label className="mb-1 block text-sm font-medium text-gray-700">Temporary Password</label>
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-3.5 py-2.5 text-xs text-blue-800">
+                  A cryptographically secure temporary password will be generated
+                  by the server and shown once after creation. The user must
+                  change it on their first login.
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700">Account Status</label>
@@ -1420,8 +1473,24 @@ export default function AdminPanel() {
                   {detailsTarget.isActive ? 'Active' : 'Inactive'}
                 </span>
               </div>
+              <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                <span className="text-sm text-gray-500">Approval</span>
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${detailsTarget.isApproved === false ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-green-50 text-green-700 ring-green-200'}`}>
+                  {detailsTarget.isApproved === false ? 'Pending approval' : 'Approved'}
+                </span>
+              </div>
             </div>
-            <div className="mt-6 flex flex-wrap gap-2">
+            <div
+                className="mt-6 flex flex-wrap gap-2"
+              >
+              {detailsTarget.id !== currentUser?.id && (
+                <button
+                  onClick={() => { setDetailsModalOpen(false); handleApprovalToggle(detailsTarget); }}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold text-white ${detailsTarget.isApproved === false ? 'bg-blue-600 hover:bg-blue-500' : 'border border-amber-300 bg-white text-amber-700 hover:bg-amber-50 font-medium'}`}
+                >
+                  {detailsTarget.isApproved === false ? 'Approve Account' : 'Revoke Approval'}
+                </button>
+              )}
               <button
                 onClick={() => { setDetailsModalOpen(false); openEdit(detailsTarget); }}
                 className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-navy-900 hover:bg-gray-50"

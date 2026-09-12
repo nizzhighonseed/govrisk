@@ -7,10 +7,19 @@ from auth.models import User
 from auth.schemas import (
     UserResponse, ProfileUpdate, PasswordChange,
     UserRoleUpdate, UserStatusUpdate, AdminUserCreate, AdminUserUpdate,
-    PasswordResetResponse,
+    AdminCreateUserResponse, PasswordResetResponse, UserApprovalUpdate,
 )
-from auth.security import hash_password, verify_password, generate_id
-from auth.dependencies import get_current_user, require_admin
+from auth.security import (
+    hash_password,
+    safe_verify_password,
+    generate_id,
+    generate_temporary_password,
+)
+from auth.dependencies import (
+    get_current_user,
+    get_current_user_changing_password,
+    require_admin,
+)
 from auth.serializers import user_to_response
 from auth.audit import log_audit, next_user_id, ACTIONS
 
@@ -51,17 +60,41 @@ def update_profile(
 @router.put("/me/password")
 def change_password(
     data: PasswordChange,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_changing_password),
     db: Session = Depends(get_auth_db),
 ):
-    if not verify_password(data.currentPassword, user.password_hash):
+    """Change the caller's own password.
+
+    Uses the permissive auth dependency so a user whose account is flagged
+    ``must_change_password`` can still reach this endpoint to complete their
+    first-login flow. ``must_change_password`` is cleared ONLY after the new
+    password is verified to satisfy the existing policy and the fresh hash is
+    successfully stored - a failed attempt leaves the flag untouched.
+    """
+    if not safe_verify_password(data.currentPassword, user.password_hash):
+        log_audit(
+            db,
+            user,
+            ACTIONS["PASSWORD_CHANGE_FAILED"],
+            target_user_id=user.user_id,
+            details="Password change rejected: current password is incorrect",
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
-    user.password_hash = hash_password(data.newPassword)
-    db.commit()
-    log_audit(db, user, ACTIONS["PASSWORD_CHANGED"], target_user_id=user.user_id)
+    new_hashed = hash_password(data.newPassword)
+    user.password_hash = new_hashed
+    user.must_change_password = False
+    db.flush()
+    log_audit(
+        db,
+        user,
+        ACTIONS["PASSWORD_CHANGED"],
+        target_user_id=user.user_id,
+        details="Password changed",
+    )
     db.commit()
     return {"message": "Password changed successfully"}
 
@@ -97,6 +130,7 @@ def list_users(
     role: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     department: Optional[str] = Query(None),
+    approval: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
 ):
@@ -119,6 +153,11 @@ def list_users(
             query = query.filter(User.is_active == True)
         elif status == "inactive":
             query = query.filter(User.is_active == False)
+    if approval:
+        if approval == "pending":
+            query = query.filter(User.is_approved == False)
+        elif approval == "approved":
+            query = query.filter(User.is_approved == True)
     if department:
         query = query.filter(User.department.ilike(f"%{department}%"))
 
@@ -135,7 +174,7 @@ def list_users(
     }
 
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=AdminCreateUserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(
     data: AdminUserCreate,
     admin: User = Depends(require_admin),
@@ -144,16 +183,28 @@ def create_user(
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account with this email already exists")
 
+    # The temporary password is generated server-side with CSPRNG randomness
+    # (auth.security.generate_temporary_password). Plaintext exists only in
+    # this response, returned exactly once to the calling admin; it is never
+    # stored, persisted, or audited.
+    temp_password = generate_temporary_password()
+
     user = User(
         id=generate_id(),
         user_id=next_user_id(db),
         full_name=data.fullName,
         email=data.email,
-        password_hash=hash_password(data.temporaryPassword),
+        password_hash=hash_password(temp_password),
         role=data.role,
         department=data.department,
         designation=data.designation,
         is_active=data.isActive,
+        # An admin-created account is authorised by the admin's explicit act;
+        # the approval workflow only governs self-registered accounts.
+        is_approved=True,
+        # The user received a temporary password and MUST pick a permanent
+        # one before they can use the portfolio.
+        must_change_password=True,
     )
     db.add(user)
     db.flush()
@@ -164,9 +215,21 @@ def create_user(
         target_user_id=user.user_id,
         details=f"Created new {data.role} account",
     )
+    log_audit(
+        db,
+        admin,
+        ACTIONS["TEMP_PASSWORD_GENERATED"],
+        target_user_id=user.user_id,
+        details="Generated temporary password; password change required at first login",
+    )
     db.commit()
     db.refresh(user)
-    return user_to_response(user)
+
+    response = AdminCreateUserResponse(
+        **user_to_response(user).model_dump(),
+        temporaryPassword=temp_password,
+    )
+    return response
 
 
 @router.get("/{identifier}", response_model=UserResponse)
@@ -282,6 +345,52 @@ def update_user_status(
     return user_to_response(user)
 
 
+@router.patch("/{identifier}/approval", response_model=UserResponse)
+def update_user_approval(
+    identifier: str,
+    data: UserApprovalUpdate,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_auth_db),
+):
+    """Approve or reject (unapprove) a user's portfolio access.
+
+    Admin-only. A user can never change their own approval state, and the last
+    active admin can never be unapproved (mirrors the role/status guards).
+    Approval only flips is_approved - deactivated accounts stay blocked until
+    an admin reactivates them.
+    """
+    user = _resolve_user(db, identifier)
+    if user.id == admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own approval state",
+        )
+    if user.role == "admin" and not data.isApproved:
+        other_active_admins = db.query(User).filter(
+            User.role == "admin",
+            User.is_active == True,
+            User.is_approved == True,
+            User.id != user.id,
+        ).count()
+        if other_active_admins == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot unapprove the last active admin",
+            )
+    user.is_approved = data.isApproved
+    db.flush()
+    log_audit(
+        db,
+        admin,
+        ACTIONS["USER_APPROVED"] if data.isApproved else ACTIONS["USER_REJECTED"],
+        target_user_id=user.user_id,
+        details="Approved account" if data.isApproved else "Rejected account approval",
+    )
+    db.commit()
+    db.refresh(user)
+    return user_to_response(user)
+
+
 @router.post("/{identifier}/reset-password", response_model=PasswordResetResponse)
 def reset_user_password(
     identifier: str,
@@ -289,25 +398,31 @@ def reset_user_password(
     db: Session = Depends(get_auth_db),
 ):
     user = _resolve_user(db, identifier)
-    temp_password = f"GovRisk@{_random_temp_suffix()}"
+    # New temporary password is generated server-side with CSPRNG randomness
+    # (auth.security.generate_temporary_password) and returned exactly once to
+    # the admin in this response. It is never stored in plaintext and the
+    # account must change it at next login, invalidating any previously known
+    # password.
+    temp_password = generate_temporary_password()
     user.password_hash = hash_password(temp_password)
+    user.must_change_password = True
     db.flush()
     log_audit(
         db,
         admin,
         ACTIONS["PASSWORD_RESET"],
         target_user_id=user.user_id,
-        details="Generated temporary password",
+        details="Password reset; temporary password issued; change required at next login",
+    )
+    log_audit(
+        db,
+        admin,
+        ACTIONS["TEMP_PASSWORD_GENERATED"],
+        target_user_id=user.user_id,
+        details="Generated temporary password; password change required at next login",
     )
     db.commit()
     return PasswordResetResponse(
         message="Temporary password generated",
         temporaryPassword=temp_password,
     )
-
-
-def _random_temp_suffix() -> str:
-    import random
-    import string
-    digits = "".join(random.choices(string.digits, k=4))
-    return f"{digits}"

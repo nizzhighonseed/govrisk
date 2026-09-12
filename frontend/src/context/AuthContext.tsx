@@ -10,6 +10,8 @@ interface User {
   department?: string;
   designation?: string;
   isActive: boolean;
+  isApproved: boolean;
+  mustChangePassword?: boolean;
   createdAt: string;
   updatedAt: string;
   lastLogin?: string;

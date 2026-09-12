@@ -18,10 +18,20 @@ from ai.ai_service import latest_prediction, _active_emerging_risks, _recent_ano
 from auth.dependencies import get_current_user
 from auth.models import User
 from config import ai_logger
+from services.text_guard import strip_html_tags
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
 _ID_PATTERN = re.compile(r"PRJ-\d{3}", re.IGNORECASE)
+
+
+def _safe_text(value) -> str:
+    """User/NLP-derived text embedded in replies, stripped of HTML tags.
+
+    The frontend renders replies as text (primary trust boundary); stripping
+    here is defense in depth so the backend never emits executable markup.
+    """
+    return strip_html_tags(value)
 
 
 def _find_mentions(query: str) -> list:
@@ -34,19 +44,19 @@ def _early_warning_line(db: Session, project) -> str:
     risks = _active_emerging_risks(db, project.id)
 
     if not pred:
-        return f"{project.name} ({project.id}) has no AI snapshot yet - run an analysis first."
+        return f"{_safe_text(project.name)} ({project.id}) has no AI snapshot yet - run an analysis first."
 
     line = (
-        f"{project.name} ({project.id}) is projected at ~{pred.future_score or pred.current_score or '?'}/100 "
+        f"{_safe_text(project.name)} ({project.id}) is projected at ~{pred.future_score or pred.current_score or '?'}/100 "
         f"within {pred.horizon_days} days "
         f"(schedule-delay p: {pred.schedule_delay_probability * 100:.0f}%, "
         f"cost-overrun p: {pred.cost_overrun_probability * 100:.0f}%)."
     )
     if anomalies:
         top = max(anomalies, key=lambda a: a["score"])
-        line += f" Top anomaly: {top['title']} ({top['severity']})."
+        line += f" Top anomaly: {_safe_text(top['title'])} ({_safe_text(top['severity'])})."
     if risks:
-        line += f" Emerging risk: {risks[0]['title']} ({risks[0]['severity']})."
+        line += f" Emerging risk: {_safe_text(risks[0]['title'])} ({_safe_text(risks[0]['severity'])})."
     return line
 
 

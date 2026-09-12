@@ -5,6 +5,7 @@ import AdminRoute from './components/auth/AdminRoute';
 import AppLayout from './components/layout/AppLayout';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ChangePassword from './pages/ChangePassword';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import ProjectDetails from './pages/ProjectDetails';
@@ -25,6 +26,7 @@ function App() {
           <Route path="/register" element={<Register />} />
 
           <Route element={<ProtectedRoute />}>
+            <Route path="/change-password" element={<ChangePassword />} />
             <Route element={<AppLayout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/projects" element={<Projects />} />
