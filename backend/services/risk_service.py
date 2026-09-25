@@ -212,7 +212,7 @@ def _factor_severity(score):
     return "VERY LOW"
 
 
-def _factor_result(key, prob, impact, reason, available, demanded_score=False):
+def _factor_result(key, prob, impact, reason, available, demanded_score=False, conditions=None):
     """Build a factor dict. Honors the unknown-data baseline."""
     if not available:
         if prob is None:
@@ -232,8 +232,12 @@ def _factor_result(key, prob, impact, reason, available, demanded_score=False):
         score = min(score, demanded_score)
     weight = CFG.FACTOR_WEIGHTS[key]
     contribution = round(score * weight / 100.0, 2)
+    triggered_conditions = [
+        str(value) for value in (conditions or []) if value not in (None, "")
+    ]
     return {
         "key": key,
+        "factor": key,
         "name": CFG.FACTOR_NAMES[key],
         "score": score,
         "weight": weight,
@@ -242,6 +246,8 @@ def _factor_result(key, prob, impact, reason, available, demanded_score=False):
         "impact": round(impact_v, 3),
         "severity": _factor_severity(score),
         "reason": reason,
+        "explanation": reason,
+        "triggeredConditions": triggered_conditions,
         "dataAvailable": available,
     }
 
@@ -276,7 +282,16 @@ def eval_budget(project, inputs, d):
         reason = f"Revised cost is {overrun:.1f}% above approved cost"
     else:
         reason = "Cost is tracking close to the approved estimate"
-    return _factor_result("budget", prob, impact, reason, True)
+    conditions = []
+    if price:
+        conditions.append(f"Material price increase: {price:.1f}%")
+    if burn >= 85 and physical < 60:
+        conditions.append(
+            f"Budget burn {burn:.0f}% against {physical:.0f}% physical progress"
+        )
+    if overrun > 0.5:
+        conditions.append(f"Revised cost variance: {overrun:.1f}%")
+    return _factor_result("budget", prob, impact, reason, True, conditions=conditions)
 
 
 # factor 2 - schedule & delay
@@ -298,7 +313,16 @@ def eval_schedule(project, inputs, d):
     if d["milestone_frac"] and d["milestone_frac"] >= 0.3:
         reasons.append(f"{d['milestones_delayed']} of {d['milestones_total']} milestones are delayed")
     reason = "; ".join(reasons) or "Project is broadly on schedule"
-    return _factor_result("schedule", prob, impact, reason, True)
+    conditions = []
+    if d["gap"] >= 2:
+        conditions.append(f"Progress gap: {d['gap']:.0f}%")
+    if slippage >= 2:
+        conditions.append(f"Predicted completion slippage: {int(round(slippage))} months")
+    if d["milestone_frac"] and d["milestone_frac"] >= 0.3:
+        conditions.append(
+            f"Delayed milestones: {d['milestones_delayed']} of {d['milestones_total']}"
+        )
+    return _factor_result("schedule", prob, impact, reason, True, conditions=conditions)
 
 
 # factor 3 - completion rate
@@ -318,7 +342,14 @@ def eval_completion(project, inputs, d):
         )
     else:
         reason = "Completion is progressing in line with expectations"
-    return _factor_result("completion", prob, impact, reason, True)
+    conditions = []
+    if deficit >= 2:
+        conditions.append(f"Completion deficit: {deficit:.0f}%")
+    if d["physical"] < 30 and elapsed > 40:
+        conditions.append(
+            f"Physical progress {d['physical']:.0f}% at {elapsed:.0f}% of elapsed timeline"
+        )
+    return _factor_result("completion", prob, impact, reason, True, conditions=conditions)
 
 
 # factor 4 - financial progress gap
@@ -343,7 +374,10 @@ def eval_financial(project, inputs, d):
         else:
             reason = "Financial and physical progress are broadly aligned"
     impact = 0.85 if abs(gap) >= 25 else 0.70
-    return _factor_result("financial", prob, impact, reason, True)
+    conditions = []
+    if abs(gap) >= 10:
+        conditions.append(f"Financial vs physical progress gap: {gap:+.0f} points")
+    return _factor_result("financial", prob, impact, reason, True, conditions=conditions)
 
 
 # factor 5 - weather
@@ -369,7 +403,14 @@ def eval_weather(project, inputs, d):
     if working >= 15:
         reasons.append(f"About {working:.0f} working days lost to weather")
     reason = "; ".join(reasons) or ("Weather conditions are favourable" if avail else "No weather information recorded")
-    return _factor_result("weather", prob, impact, reason, avail)
+    conditions = []
+    if cond is not None and cond >= 0.45:
+        conditions.append(f"Weather condition: {w.get('condition')}")
+    if working >= 15:
+        conditions.append(f"Weather working days lost: {working:.0f}")
+    if disruption is not None and disruption >= 0.35:
+        conditions.append(f"Weather disruption: {w.get('disruption')}")
+    return _factor_result("weather", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 6 - ground / geological
@@ -401,7 +442,16 @@ def eval_ground(project, inputs, d):
     if slope >= 0.3:
         reasons.append("Landslide-prone terrain")
     reason = "; ".join(reasons) or ("Ground conditions are manageable" if avail else "No ground condition data recorded")
-    return _factor_result("ground", prob, impact, reason, avail)
+    conditions = []
+    if cond is not None and cond >= 0.55:
+        conditions.append(f"Ground condition: {g.get('condition')}")
+    if rock >= 0.2:
+        conditions.append(f"Rock excavation: {g.get('rockExcavation')}")
+    if water >= 0.3:
+        conditions.append(f"Groundwater: {g.get('groundwater')}")
+    if slope >= 0.3:
+        conditions.append(f"Landslide potential: {g.get('landslidePotential')}")
+    return _factor_result("ground", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 7 - natural calamity
@@ -426,7 +476,11 @@ def eval_calamity(project, inputs, d):
     }
     elevated = [names[k] for k, p in haz.items() if p is not None and p >= 0.35]
     reason = f"Site exposure to {', '.join(elevated)}" if elevated else "Low natural hazard exposure"
-    return _factor_result("calamity", prob, impact, reason, avail)
+    conditions = [
+        f"{names[k]} exposure: {cal.get(k)}"
+        for k, p in haz.items() if p is not None and p >= 0.35
+    ]
+    return _factor_result("calamity", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 8 - material
@@ -451,7 +505,16 @@ def eval_material(project, inputs, d):
     if m.get("qualityIssues"):
         reasons.append(f"{_int(m.get('qualityIssues') or 0)} quality inspection failures")
     reason = "; ".join(reasons) or ("Material supply is healthy" if avail else "No material data recorded")
-    return _factor_result("material", prob, impact, reason, avail)
+    conditions = []
+    if m.get("availability") and m.get("availability") != "ADEQUATE":
+        conditions.append(f"Material availability: {m.get('availability')}")
+    if price > 0:
+        conditions.append(f"Material price increase: {price:.1f}%")
+    if m.get("qualityIssues"):
+        conditions.append(f"Quality inspection failures: {_int(m.get('qualityIssues')) or 0}")
+    if m.get("criticalMaterial"):
+        conditions.append("Critical material dependency recorded")
+    return _factor_result("material", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 9 - workforce
@@ -485,7 +548,18 @@ def eval_workforce(project, inputs, d):
     if w.get("safetyIncidentCount"):
         reasons.append(f"{_int(w.get('safetyIncidentCount')) or 0} safety incidents reported")
     reason = "; ".join(reasons) or ("Workforce is adequate" if avail else "No workforce data recorded")
-    return _factor_result("workforce", prob, impact, reason, avail)
+    conditions = []
+    if str(w.get("availability") or "").upper() in ("SHORTAGE", "SEVERE_SHORTAGE"):
+        conditions.append(f"Workforce availability: {w.get('availability')}")
+    if str(w.get("skilledAvailability") or "").upper() in ("SHORTAGE", "SEVERE_SHORTAGE"):
+        conditions.append(f"Skilled labour availability: {w.get('skilledAvailability')}")
+    if low_prod:
+        conditions.append(f"Workforce productivity: {w.get('productivity')}")
+    if w.get("turnoverPct"):
+        conditions.append(f"Workforce turnover: {w.get('turnoverPct')}%")
+    if w.get("safetyIncidentCount"):
+        conditions.append(f"Safety incidents: {_int(w.get('safetyIncidentCount')) or 0}")
+    return _factor_result("workforce", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 10 - contractor performance
@@ -507,7 +581,7 @@ def eval_contractor(project, inputs, d):
     impact = 0.60
     if perf == "CRITICAL":
         impact = 0.95
-    elif perf in ("POOR",) or (c.get("delayedMilestoneCount") or 0) >= 5:
+    elif perf in ("POOR",) or (_int(c.get("delayedMilestoneCount")) or 0) >= 5:
         impact = 0.85
     elif perf == "FAIR":
         impact = 0.70
@@ -521,7 +595,20 @@ def eval_contractor(project, inputs, d):
     if c.get("unresolvedIssueCount"):
         reasons.append(f"{_int(c.get('unresolvedIssueCount')) or 0} unresolved contractor issues")
     reason = "; ".join(reasons) or ("Contractor performance is satisfactory" if avail else "No contractor data recorded")
-    return _factor_result("contractor", prob, impact, reason, avail)
+    conditions = []
+    if perf in ("POOR", "CRITICAL"):
+        conditions.append(f"Contractor performance: {perf}")
+    if c.get("delayedMilestoneCount"):
+        conditions.append(f"Contractor-delayed milestones: {_int(c.get('delayedMilestoneCount')) or 0}")
+    if c.get("qualityIssueCount"):
+        conditions.append(f"Contractor quality issues: {_int(c.get('qualityIssueCount')) or 0}")
+    if c.get("complianceIssueCount"):
+        conditions.append(f"Contractor compliance issues: {_int(c.get('complianceIssueCount')) or 0}")
+    if str(c.get("financialStress") or "").upper() not in ("", "NONE"):
+        conditions.append(f"Contractor financial stress: {c.get('financialStress')}")
+    if c.get("unresolvedIssueCount"):
+        conditions.append(f"Unresolved contractor issues: {_int(c.get('unresolvedIssueCount')) or 0}")
+    return _factor_result("contractor", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 11 - engineering / design
@@ -552,7 +639,18 @@ def eval_engineering(project, inputs, d):
     if str(e.get("reworkLevel") or "").upper() == "HIGH":
         reasons.append("High amount of rework")
     reason = "; ".join(reasons) or ("Design is stable" if avail else "No engineering data recorded")
-    return _factor_result("engineering", prob, impact, reason, avail)
+    conditions = []
+    if str(e.get("reworkLevel") or "").upper() not in ("", "NONE"):
+        conditions.append(f"Rework level: {e.get('reworkLevel')}")
+    if e.get("designChangeCount"):
+        conditions.append(f"Design changes: {_int(e.get('designChangeCount')) or 0}")
+    if e.get("designErrorCount"):
+        conditions.append(f"Design errors: {_int(e.get('designErrorCount')) or 0}")
+    if e.get("technicalComplexity"):
+        conditions.append(f"Technical complexity: {e.get('technicalComplexity')}")
+    if e.get("approvalPending"):
+        conditions.append("Design approval pending")
+    return _factor_result("engineering", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 12 - land & environmental clearance
@@ -591,7 +689,16 @@ def eval_clearance(project, inputs, d):
     if land_pct is not None and land_pct >= 100 and env in (0.05,):
         reasons.append("Land and clearances are fully in place")
     reason = "; ".join(reasons) or ("Land and clearances in place" if avail else "No clearance data recorded")
-    return _factor_result("clearance", prob, impact, reason, avail)
+    conditions = []
+    if land_pct is not None and land_pct < 100:
+        conditions.append(f"Land acquired: {land_pct:.0f}%")
+    if str(cl.get("environmentalClearance") or "").upper() in ("PENDING", "REJECTED"):
+        conditions.append(f"Environmental clearance: {cl.get('environmentalClearance')}")
+    if forest is not None and forest >= 0.50:
+        conditions.append(f"Forest clearance: {cl.get('forestClearance')}")
+    if cl.get("rehabilitationPending"):
+        conditions.append("Rehabilitation obligation pending")
+    return _factor_result("clearance", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 13 - government / administrative
@@ -623,7 +730,16 @@ def eval_administrative(project, inputs, d):
     if a.get("procurementDelay"):
         reasons.append("Procurement is delayed")
     reason = "; ".join(reasons) or ("Approvals are progressing normally" if avail else "No administrative data recorded")
-    return _factor_result("administrative", prob, impact, reason, avail)
+    conditions = []
+    if str(a.get("turnaround") or "").upper() in ("SLOW", "BLOCKED"):
+        conditions.append(f"Approval turnaround: {a.get('turnaround')}")
+    if a.get("pendingApprovalCount"):
+        conditions.append(f"Pending approvals: {_int(a.get('pendingApprovalCount')) or 0}")
+    if dep is not None and dep >= 0.30:
+        conditions.append(f"Inter-department dependency: {a.get('interDepartmentDependency')}")
+    if a.get("procurementDelay"):
+        conditions.append("Procurement delay recorded")
+    return _factor_result("administrative", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 14 - supply chain
@@ -660,7 +776,18 @@ def eval_supply_chain(project, inputs, d):
     if s.get("deliveryDelayCount"):
         reasons.append(f"{_int(s.get('deliveryDelayCount')) or 0} delivery delays observed")
     reason = "; ".join(reasons) or ("Logistics are reliable" if avail else "No supply chain data recorded")
-    return _factor_result("supply_chain", prob, impact, reason, avail)
+    conditions = []
+    if sup is not None and sup >= 0.20:
+        conditions.append(f"Supplier dependency: {s.get('supplierDependency')}")
+    if eq is not None and eq >= 0.30:
+        conditions.append(f"Equipment availability: {s.get('equipmentAvailability')}")
+    if s.get("importDependency"):
+        conditions.append("Critical import dependency recorded")
+    if s.get("deliveryDelayCount"):
+        conditions.append(f"Delivery delays: {_int(s.get('deliveryDelayCount')) or 0}")
+    if acc is not None and acc >= 0.45:
+        conditions.append(f"Site accessibility: {s.get('accessibility')}")
+    return _factor_result("supply_chain", prob, impact, reason, avail, conditions=conditions)
 
 
 # factor 15 - legal / social
@@ -696,7 +823,20 @@ def eval_legal_social(project, inputs, d):
     if comp:
         reasons.append("Compensation payments outstanding")
     reason = "; ".join(reasons) or ("No legal or social issues" if avail else "No legal/social data recorded")
-    return _factor_result("legal_social", prob, impact, reason, avail)
+    conditions = []
+    if str(ls.get("oppositionLevel") or "").upper() in ("MODERATE", "HIGH"):
+        conditions.append(f"Local opposition: {ls.get('oppositionLevel')}")
+    if ls.get("activeDisputeCount"):
+        conditions.append(f"Active disputes: {_int(ls.get('activeDisputeCount')) or 0}")
+    if ls.get("protestCount"):
+        conditions.append(f"Protests recorded: {_int(ls.get('protestCount')) or 0}")
+    if comp:
+        conditions.append(f"Unresolved compensation: {comp}")
+    if ls.get("courtStay"):
+        conditions.append("Active court stay recorded")
+    if ls.get("rehabilitationOutstanding"):
+        conditions.append("Rehabilitation obligation outstanding")
+    return _factor_result("legal_social", prob, impact, reason, avail, conditions=conditions)
 
 
 FACTOR_EVALUATORS = {
@@ -734,9 +874,15 @@ def evaluate_interactions(factors, inputs):
         if ok:
             triggered.append({
                 "key": rule["key"],
+                "trigger": rule["key"],
                 "name": rule["label"],
+                "affectedFactors": [factor_key for factor_key, _ in rule["conditions"]],
+                "triggeredConditions": [
+                    f"{factor_key} >= {min_score}" for factor_key, min_score in rule["conditions"]
+                ],
                 "penalty": rule["penalty"],
                 "reason": rule["reason"],
+                "explanation": rule["reason"],
             })
     return triggered
 
@@ -777,10 +923,19 @@ def evaluate_blockers(inputs):
     matched = []
     for rule in CFG.BLOCKER_RULES:
         if _blocker_matches(rule["key"], inputs):
+            minimum_score = (
+                CFG.BLOCKER_CRITICAL_FLOOR
+                if rule["level"] == "CRITICAL"
+                else CFG.BLOCKER_HIGH_FLOOR
+            )
             matched.append({
                 "key": rule["key"],
+                "blocker": rule["key"],
                 "level": rule["level"],
+                "severity": rule["level"],
+                "minimumScore": minimum_score,
                 "reason": rule["reason"],
+                "explanation": rule["reason"],
                 "recommendation": rule["recommendation"],
             })
     return matched
@@ -884,10 +1039,32 @@ def assess_project(project, now=None):
     available_weight = sum(f["weight"] for f in factors if f["dataAvailable"])
     completeness = round(available_weight)  # weight-basis percent (weights total 100)
 
+    total_factors = len(factors)
+    available_factors = [f for f in factors if f["dataAvailable"]]
+    missing_factors = [f for f in factors if not f["dataAvailable"]]
+    factor_completeness = (
+        round(len(available_factors) / total_factors * 100) if total_factors else 0
+    )
+    data_quality = {
+        "totalFactors": total_factors,
+        "availableFactors": len(available_factors),
+        "missingFactors": len(missing_factors),
+        "completeness": factor_completeness,
+        "weightedCompleteness": completeness,
+        "availableFactorKeys": [f["key"] for f in available_factors],
+        "missingFactorKeys": [f["key"] for f in missing_factors],
+        "missingFactorNames": [f["name"] for f in missing_factors],
+    }
+    assessment_status = "COMPLETE" if not missing_factors else "INSUFFICIENT_DATA"
+    risk_level_provisional = bool(missing_factors)
+    calculated_at = now.isoformat() if now else datetime.now(timezone.utc).isoformat()
+
     top = sorted(factors, key=lambda f: f["contribution"], reverse=True)[:3]
-    missing = [f["name"] for f in factors if not f["dataAvailable"]]
+    top_risk_factors = top
+    missing = [f["name"] for f in missing_factors]
     recommendations = build_recommendations(factors, blockers, level)
     explanations = build_explanations(project, final, level, factors, interactions, blockers)
+    configured_interaction_penalty = sum(i["penalty"] for i in interactions)
 
     budget_prob = next(f for f in factors if f["key"] == "budget")["probability"]
     schedule_prob = next(f for f in factors if f["key"] == "schedule")["probability"]
@@ -902,10 +1079,30 @@ def assess_project(project, now=None):
         "criticalBlockerReasons": [b["reason"] for b in blockers],
         "factors": factors,
         "interactions": interactions,
+        "blockers": blockers,
         "topRisks": [f["name"] for f in top],
+        "topRiskFactors": top_risk_factors,
         "recommendations": recommendations,
         "explanations": explanations,
         "missingData": missing,
+        "dataQuality": data_quality,
+        "assessmentStatus": assessment_status,
+        "riskLevelProvisional": risk_level_provisional,
+        "interactionPenalty": penalty,
+        "blockerFloor": blocker_floor,
+        "scoreBreakdown": {
+            "weightedBase": base,
+            "interactionPenalty": penalty,
+            "interactionPenaltyConfigured": configured_interaction_penalty,
+            "interactionPenaltyCap": CFG.MAX_INTERACTION_PENALTY,
+            "dominantFactorBoost": round(boost, 2),
+            "blockerFloor": blocker_floor,
+            "rawScore": raw_score,
+            "finalScore": final,
+        },
+        "engineVersion": CFG.ENGINE_VERSION,
+        "contractVersion": CFG.RISK_CONTRACT_VERSION,
+        "assessedAt": calculated_at,
         "riskTrend": {
             "available": False,
             "note": "No historical risk snapshots exist yet",
@@ -913,7 +1110,7 @@ def assess_project(project, now=None):
         "costOverrunProbability": round((budget_prob or 0.0) * 100),
         "delayProbability": round((schedule_prob or 0.0) * 100),
         "implementationRisk": round((base or 0.0)),
-        "calculatedAt": now.isoformat() if now else datetime.now(timezone.utc).isoformat(),
+        "calculatedAt": calculated_at,
     }
 
 
@@ -1008,7 +1205,9 @@ def get_project_analytics(db: Session):
         avg_risk = round(sum(assessments[p.id]["riskScore"] for p in projs) / len(projs), 1)
         avg_cost = round(sum(((p.current_cost - p.original_cost) / p.original_cost * 100)
                              for p in projs if p.original_cost) / len(projs), 1)
-        avg_delay = round(sum(p.delay_probability for p in projs) / len(projs), 1)
+        avg_delay = round(
+            sum(assessments[p.id]["delayProbability"] for p in projs) / len(projs), 1
+        )
         sector_analytics.append({
             "sector": sector,
             "avgRisk": avg_risk,
@@ -1023,7 +1222,9 @@ def get_project_analytics(db: Session):
     ministry_list = []
     for ministry, projs in ministry_map.items():
         avg_risk = round(sum(assessments[p.id]["riskScore"] for p in projs) / len(projs), 1)
-        high_count = sum(1 for p in projs if p.risk_level in ("HIGH", "CRITICAL"))
+        high_count = sum(
+            1 for p in projs if assessments[p.id]["riskLevel"] in ("HIGH", "CRITICAL")
+        )
         ministry_list.append({
             "ministry": ministry,
             "projectCount": len(projs),
@@ -1062,9 +1263,10 @@ def get_project_analytics(db: Session):
         entry = state_map.setdefault(st, {"state": st, "projectCount": 0, "riskSum": 0, "critical": 0, "high": 0})
         entry["projectCount"] += 1
         entry["riskSum"] += assessments[p.id]["riskScore"]
-        if p.risk_level == "CRITICAL":
+        level = assessments[p.id]["riskLevel"]
+        if level == "CRITICAL":
             entry["critical"] += 1
-        elif p.risk_level == "HIGH":
+        elif level == "HIGH":
             entry["high"] += 1
     risk_by_state = [
         {
@@ -1088,7 +1290,7 @@ def get_project_analytics(db: Session):
     for i, month_data in enumerate(risk_trends):
         progress = (i + 1) / len(risk_trends)
         for p in projects:
-            level = p.risk_level
+            level = assessments[p.id]["riskLevel"]
             if level == "CRITICAL" and progress > 0.6:
                 level = "HIGH"
             elif level == "HIGH" and progress > 0.8:
@@ -1117,12 +1319,13 @@ def generate_assistant_response(query: str, db: Session) -> str:
     if not projects:
         return "No projects are currently monitored in the system."
 
-    critical = [p for p in projects if p.risk_level == "CRITICAL"]
-    high = [p for p in projects if p.risk_level == "HIGH"]
+    assessments = {p.id: assess_project(p) for p in projects}
+    critical = [p for p in projects if assessments[p.id]["riskLevel"] == "CRITICAL"]
+    high = [p for p in projects if assessments[p.id]["riskLevel"] == "HIGH"]
 
     if "immediate intervention" in lower or "intervention" in lower:
         flagged = critical + high
-        flagged.sort(key=lambda p: p.risk_score, reverse=True)
+        flagged.sort(key=lambda p: assessments[p.id]["riskScore"], reverse=True)
         lines = [
             f"Based on the current demonstration portfolio of {len(projects)} projects, "
             f"{len(flagged)} projects require some level of attention. "
@@ -1130,10 +1333,11 @@ def generate_assistant_response(query: str, db: Session) -> str:
         ]
         for i, p in enumerate(flagged[:4], 1):
             cost_overrun = round((p.current_cost - p.original_cost) / p.original_cost * 100, 1) if p.original_cost else 0
+            assessment = assessments[p.id]
             lines.append(
-                f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — Risk Score: {p.risk_score}/100\n"
-                f"   - Delay Probability: {p.delay_probability}% | Cost Overrun: {cost_overrun}%\n"
-                f"   - Status: {p.risk_level}"
+                f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — Risk Score: {assessment['riskScore']}/100\n"
+                f"   - Delay Probability: {assessment['delayProbability']}% | Cost Overrun: {cost_overrun}%\n"
+                f"   - Status: {assessment['riskLevel']}"
             )
         lines.append(
             "**Recommended Next Step:** Convene the central monitoring committee "
@@ -1142,15 +1346,18 @@ def generate_assistant_response(query: str, db: Session) -> str:
         return "\n".join(lines)
 
     if "highest risk" in lower or "high risk" in lower:
-        sorted_projects = sorted(projects, key=lambda p: p.risk_score, reverse=True)
+        sorted_projects = sorted(
+            projects, key=lambda p: assessments[p.id]["riskScore"], reverse=True
+        )
         lines = ["Based on the current portfolio analysis, here are the highest-risk projects:"]
         for i, p in enumerate(sorted_projects[:4], 1):
             cost_overrun = round((p.current_cost - p.original_cost) / p.original_cost * 100, 1) if p.original_cost else 0
+            assessment = assessments[p.id]
             lines.append(
-                f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — Risk Score: {p.risk_score}/100\n"
-                f"   - Delay Probability: {p.delay_probability}%\n"
+                f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — Risk Score: {assessment['riskScore']}/100\n"
+                f"   - Delay Probability: {assessment['delayProbability']}%\n"
                 f"   - Cost Overrun: {cost_overrun}%\n"
-                f"   - Status: {p.risk_level}"
+                f"   - Status: {assessment['riskLevel']}"
             )
         lines.append(
             "**Recommended Action:** These projects should be escalated for "
@@ -1159,11 +1366,14 @@ def generate_assistant_response(query: str, db: Session) -> str:
         return "\n".join(lines)
 
     if "delay" in lower:
-        delayed = [p for p in projects if p.delay_probability >= 50]
-        delayed.sort(key=lambda p: p.delay_probability, reverse=True)
+        delayed = [p for p in projects if assessments[p.id]["delayProbability"] >= 50]
+        delayed.sort(key=lambda p: assessments[p.id]["delayProbability"], reverse=True)
         lines = ["The following projects have a **delay probability above 50%** and require attention:"]
         for i, p in enumerate(delayed, 1):
-            lines.append(f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — {p.delay_probability}% delay probability")
+            lines.append(
+                f"{i}. **{_safe_text(p.name)}** ({_safe_text(p.state)}) — "
+                f"{assessments[p.id]['delayProbability']}% delay probability"
+            )
         return "\n".join(lines)
 
     if "cost" in lower or "overrun" in lower:
@@ -1213,8 +1423,11 @@ def generate_assistant_response(query: str, db: Session) -> str:
 
     if "overview" in lower or "portfolio" in lower:
         total_cost = sum(p.current_cost for p in projects)
-        medium = [p for p in projects if p.risk_level == "MEDIUM"]
-        low = [p for p in projects if p.risk_level == "LOW"]
+        medium = [p for p in projects if assessments[p.id]["riskLevel"] == "MEDIUM"]
+        low = [p for p in projects if assessments[p.id]["riskLevel"] == "LOW"]
+        average_risk = round(
+            sum(assessments[p.id]["riskScore"] for p in projects) / len(projects), 1
+        )
         return (
             f"**Portfolio Snapshot** ({len(projects)} monitored projects)\n\n"
             f"- **Total Current Cost:** ₹{total_cost:,.0f} Cr\n"
@@ -1222,7 +1435,7 @@ def generate_assistant_response(query: str, db: Session) -> str:
             f"- **High Risk:** {len(high)} projects\n"
             f"- **Medium Risk:** {len(medium)} projects\n"
             f"- **Low Risk:** {len(low)} projects\n"
-            f"- **Average Risk Score:** {round(sum(p.risk_score for p in projects) / len(projects), 1)}"
+            f"- **Average Risk Score:** {average_risk}"
         )
 
     if "help" in lower:

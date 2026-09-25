@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Project
 from routers.projects import _project_to_response
+from services.risk_service import assess_project
 from auth.dependencies import get_current_user
 from auth.models import User
 
@@ -12,26 +13,32 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 @router.get("")
 def get_dashboard(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     projects = db.query(Project).all()
+    assessments = {p.id: assess_project(p) for p in projects}
 
     total = len(projects)
     high_risk = [
         p
         for p in projects
-        if p.risk_level in ("HIGH", "CRITICAL")
+        if assessments[p.id]["riskLevel"] in ("HIGH", "CRITICAL")
     ]
-    schedule_risk = [p for p in projects if p.delay_probability >= 60]
-    cost_risk = [p for p in projects if p.cost_overrun_probability >= 50]
+    schedule_risk = [
+        p for p in projects if assessments[p.id]["delayProbability"] >= 60
+    ]
+    cost_risk = [
+        p for p in projects if assessments[p.id]["costOverrunProbability"] >= 50
+    ]
 
     total_original = sum(p.original_cost for p in projects)
     total_current = sum(p.current_cost for p in projects)
 
     risk_dist = {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
     for p in projects:
-        risk_dist[p.risk_level] = risk_dist.get(p.risk_level, 0) + 1
+        level = assessments[p.id]["riskLevel"]
+        risk_dist[level] = risk_dist.get(level, 0) + 1
 
     high_risk_table = sorted(
-        [p for p in projects if p.risk_score >= 50],
-        key=lambda p: p.risk_score,
+        [p for p in projects if assessments[p.id]["riskLevel"] in ("HIGH", "CRITICAL")],
+        key=lambda p: assessments[p.id]["riskScore"],
         reverse=True,
     )[:8]
 

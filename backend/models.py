@@ -17,10 +17,13 @@ class Project(Base):
     contact_info = Column(String, nullable=True)
     original_cost = Column(Float, nullable=False)
     current_cost = Column(Float, nullable=False)
-    expenditure = Column(Float, nullable=False)
-    physical_progress = Column(Float, nullable=False)
+    # Nullable so a source that does not publish a figure records "unknown"
+    # rather than a fabricated 0.0. Layer 1 reads these through `_num(v, 0)`
+    # in `risk_service._derived`, so a NULL is handled, not crashed on.
+    expenditure = Column(Float, nullable=True)
+    physical_progress = Column(Float, nullable=True)
     financial_progress = Column(Float, nullable=True)
-    planned_progress = Column(Float, nullable=False)
+    planned_progress = Column(Float, nullable=True)
     start_date = Column(String, nullable=False)
     expected_completion = Column(String, nullable=False)
     predicted_completion = Column(String, nullable=False)
@@ -31,8 +34,12 @@ class Project(Base):
     risk_level = Column(String, nullable=False)
     milestones_total = Column(Integer, nullable=False)
     milestones_delayed = Column(Integer, nullable=False)
-    lat = Column(Float, nullable=False)
-    lng = Column(Float, nullable=False)
+    # Nullable: most government project portals publish no coordinates, and a
+    # NULL is the only honest value. 0,0 is a real point in the Gulf of Guinea
+    # and must never be used as a placeholder - it puts the project on the map
+    # as if its location were known.
+    lat = Column(Float, nullable=True)
+    lng = Column(Float, nullable=True)
     risk_factors = Column(Text, nullable=False)
     recommendations = Column(Text, nullable=False)
     risk_inputs = Column(Text, nullable=True, default="{}")
@@ -53,6 +60,10 @@ class Project(Base):
     retrieved_date = Column(String, nullable=True)
     data_confidence = Column(String, nullable=True)  # OFFICIAL|VERIFIED_SECONDARY|UNVERIFIED
     last_synced_at = Column(String, nullable=True)
+    # The sector label exactly as the source published it, kept alongside the
+    # canonical `sector` so a corrected source-specific mapping can be applied
+    # later without re-reading the source (see ingest/normalize.py).
+    source_sector = Column(String, nullable=True)
 
 
 class Alert(Base):
@@ -167,6 +178,10 @@ class MLSnapshot(Base):
     # Snapshot of the raw feature row (JSON) used to trigger history-based
     # early-warning rules without recomputation or re-fitting.
     feature_snapshot = Column(Text, nullable=True)  # JSON: dict
+    # Provenance: which PARIKSHAN artifact fingerprint produced this snapshot.
+    # NULL for snapshots written before provenance was recorded (they are
+    # retained for history but must never seed a cross-version edge trigger).
+    model_version = Column(String, nullable=True, index=True)
 
     __table_args__ = (
         Index("ix_ai_ml_snapshots_project_created", "project_id", "created_at"),
@@ -174,7 +189,22 @@ class MLSnapshot(Base):
 
 
 class Anomaly(Base):
-    """Statistical anomaly detected on a project."""
+    """Statistical anomaly detected on a project.
+
+    Lifecycle (one row per project + anomaly type while it is active):
+    - `batch_id` identifies the analysis run that most recently detected this
+      anomaly. Every anomaly produced by a single analysis shares one
+      `batch_id`, so the intelligence response can return the whole latest
+      batch instead of a single row picked by timestamp equality.
+    - `created_at` is the first detection and is never rewritten, so the
+      detection history survives every re-analysis.
+    - `last_seen_at` advances on every re-detection; `resolved_at` records
+      when the anomaly stopped being detected or was resolved by a user.
+    - `resolution_source` separates the two closures: `USER` (an officer
+      acknowledged it, and a re-analysis must not silently resurrect it) from
+      `AUTO` (the condition stopped being detected, so a later re-appearance is
+      a genuinely new occurrence and opens a new row).
+    """
 
     __tablename__ = "ai_anomalies"
 
@@ -188,9 +218,14 @@ class Anomaly(Base):
     description = Column(Text, nullable=False)
     evidence = Column(Text, nullable=True)  # JSON: list[str]
     resolved = Column(Boolean, nullable=False, default=False)
+    batch_id = Column(String, nullable=True, index=True)
+    last_seen_at = Column(String, nullable=True)
+    resolved_at = Column(String, nullable=True)
+    resolution_source = Column(String, nullable=True)  # USER|AUTO
 
     __table_args__ = (
         Index("ix_ai_anomalies_project_created", "project_id", "created_at"),
+        Index("ix_ai_anomalies_project_batch", "project_id", "batch_id"),
     )
 
 
@@ -211,6 +246,7 @@ class EmergingRisk(Base):
     recommendations = Column(Text, nullable=True)  # JSON: list[str]
     source_update_ids = Column(Text, nullable=True)  # JSON: list[int]
     status = Column(String, nullable=False, default="ACTIVE")  # ACTIVE|RESOLVED
+    resolved_at = Column(String, nullable=True)
 
     __table_args__ = (
         Index("ix_ai_emerging_risks_project_created", "project_id", "created_at"),

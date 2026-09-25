@@ -243,8 +243,11 @@ def create_project(
         risk_level="LOW",
         milestones_total=0,
         milestones_delayed=0,
-        lat=data.lat or 0.0,
-        lng=data.lng or 0.0,
+        # No coordinate fallback: 0,0 is a real location in the Gulf of
+        # Guinea, so defaulting to it would place a project on the map as if
+        # its site were known. The column is nullable and stays NULL.
+        lat=data.lat,
+        lng=data.lng,
         risk_factors=json.dumps([]),
         recommendations=json.dumps([]),
         risk_inputs=json.dumps(data.riskInputs or {}),

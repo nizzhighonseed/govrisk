@@ -31,8 +31,17 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { getProject, getProjectUpdates, deleteProjectUpdate, getAiInsights } from '../services/api';
+import {
+  getProject,
+  getProjectUpdates,
+  deleteProjectUpdate,
+  getAiInsights,
+  getAiMlStatus,
+  resolveAiAnomaly,
+  resolveEmergingRisk,
+} from '../services/api';
 import type { AiInsights, AiMlForecast } from '../services/api';
+import type { Project, RiskAssessment } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { RiskBadge } from '../components/ui/RiskBadge';
 import { RiskScore } from '../components/ui/RiskScore';
@@ -42,7 +51,12 @@ import { RiskFactorChart } from '../components/charts/RiskFactorChart';
 import { ProjectTimeline } from '../components/project/ProjectTimeline';
 import AddUpdateModal from '../components/project/AddUpdateModal';
 import AddProjectModal from '../components/admin/AddProjectModal';
-import { formatCurrency, formatDate, getRiskColor } from '../utils/helpers';
+import {
+  formatCurrency,
+  formatCurrencyNullable,
+  formatDate,
+  getRiskColor,
+} from '../utils/helpers';
 
 const UPDATE_TYPE_LABELS: Record<string, string> = {
   GENERAL: 'General',
@@ -124,7 +138,7 @@ function buildStatus(project: { riskLevel: string }) {
 export default function ProjectDetails() {
   const { id } = useParams<{ id: string }>();
   const { user: currentUser } = useAuth();
-  const [project, setProject] = useState<Awaited<ReturnType<typeof getProject>> | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -140,6 +154,8 @@ export default function ProjectDetails() {
   const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
   const [aiError, setAiError] = useState(false);
+  const [mlStatus, setMlStatus] = useState<Awaited<ReturnType<typeof getAiMlStatus>> | null>(null);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
 
   const canEditProject = currentUser?.role === 'admin' || currentUser?.role === 'officer';
 
@@ -184,6 +200,46 @@ export default function ProjectDetails() {
       .catch(() => setAiError(true))
       .finally(() => setAiLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    getAiMlStatus()
+      .then(setMlStatus)
+      .catch(() => setMlStatus(null));
+  }, [id]);
+
+  const refreshAiInsights = useCallback(() => {
+    if (!id) return;
+    getAiInsights(id)
+      .then(setAiInsights)
+      .catch(() => setAiError(true));
+  }, [id]);
+
+  async function handleResolveAnomaly(anomalyId: string) {
+    if (!id) return;
+    setResolvingId(anomalyId);
+    try {
+      await resolveAiAnomaly(id, anomalyId);
+      refreshAiInsights();
+    } catch (e: any) {
+      alert(e.message || 'Failed to resolve anomaly');
+    } finally {
+      setResolvingId(null);
+    }
+  }
+
+  async function handleResolveEmergingRisk(riskId: string) {
+    if (!id) return;
+    setResolvingId(riskId);
+    try {
+      await resolveEmergingRisk(id, riskId);
+      refreshAiInsights();
+    } catch (e: any) {
+      alert(e.message || 'Failed to resolve emerging risk');
+    } finally {
+      setResolvingId(null);
+    }
+  }
 
   useEffect(() => {
     if (!noteToast) return;
@@ -246,10 +302,14 @@ export default function ProjectDetails() {
     { name: 'Predicted Final Cost', value: predictedCost },
   ];
 
-  const riskDrivers = (project.riskReport?.factors || [])
-    .slice()
-    .sort((a: any, b: any) => b.contribution - a.contribution)
-    .map((f: any) => ({ name: f.name, value: Math.round(f.contribution) }));
+  const report: RiskAssessment | undefined = project.riskReport;
+  const riskFactorChartData = (report?.topRiskFactors || []).map((factor) => ({
+    key: factor.key,
+    name: factor.name,
+    score: factor.score,
+    severity: factor.severity,
+    dataAvailable: factor.dataAvailable,
+  }));
 
   const sectionLabel = 'text-xs font-semibold uppercase tracking-widest text-blue-600';
 
@@ -328,7 +388,7 @@ export default function ProjectDetails() {
               <span className="text-xs font-medium text-gray-500">Expenditure</span>
             </div>
             <p className="text-base font-bold text-navy-900 lg:text-lg">
-              {formatCurrency(project.expenditure)}
+              {formatCurrencyNullable(project.expenditure)}
             </p>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
@@ -383,11 +443,18 @@ export default function ProjectDetails() {
             >
               {project.riskLevel} RISK
             </p>
-            <p className="mb-5 text-center text-xs text-gray-400">
-              {project.riskConfidence !== undefined && project.riskConfidence !== null
-                ? `Model confidence: ${project.riskConfidence}% data completeness`
-                : 'Data-driven, rule-based assessment'}
+            <p className="mb-2 text-center text-xs text-gray-400">
+              {report?.dataQuality
+                ? `Evidence: ${report.dataQuality.availableFactors}/${report.dataQuality.totalFactors} factors · ${report.dataQuality.completeness}% complete`
+                : project.riskConfidence !== undefined && project.riskConfidence !== null
+                  ? `Model confidence: ${project.riskConfidence}% data completeness`
+                  : 'Data-driven, rule-based assessment'}
             </p>
+            {report?.riskLevelProvisional && (
+              <p className="mb-5 text-center text-xs font-medium text-amber-600">
+                Insufficient data: this risk level is provisional
+              </p>
+            )}
 
             {project.criticalBlocker && (
               <div className="mb-5 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
@@ -396,7 +463,7 @@ export default function ProjectDetails() {
                   <p className="text-xs font-semibold text-red-700">Critical blocker detected</p>
                   <ul className="mt-1 space-y-0.5 text-xs text-red-600">
                     {(
-                      project.riskReport?.criticalBlockerReasons || ['Unresolved critical issue']
+                      report?.criticalBlockerReasons || ['Unresolved critical issue']
                     ).map((r: string, i: number) => (
                       <li key={i}>• {r}</li>
                     ))}
@@ -461,26 +528,61 @@ export default function ProjectDetails() {
                 Why is this project at risk?
               </h3>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {(project.riskReport?.explanations?.length
-                  ? project.riskReport.explanations
-                  : project.riskFactors
-                ).map((factor: string, index: number) => (
-                  <div
-                    key={index}
-                    className="flex items-start gap-3 rounded-lg bg-orange-50/60 p-3"
-                  >
-                    <AlertTriangle size={16} className="mt-0.5 shrink-0 text-orange-500" />
-                    <span className="text-sm leading-relaxed text-gray-700">{factor}</span>
-                  </div>
-                ))}
+                {(report?.explanations?.length ? report.explanations : project.riskFactors).map(
+                  (factor: string, index: number) => (
+                    <div
+                      key={index}
+                      className="flex items-start gap-3 rounded-lg bg-orange-50/60 p-3"
+                    >
+                      <AlertTriangle size={16} className="mt-0.5 shrink-0 text-orange-500" />
+                      <span className="text-sm leading-relaxed text-gray-700">{factor}</span>
+                    </div>
+                  ),
+                )}
               </div>
 
-              {(project.riskReport?.interactions?.length || 0) > 0 && (
+              {(report?.topRiskFactors?.length || 0) > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-red-600">
+                    Top risk drivers
+                  </p>
+                  <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">
+                    {report!.topRiskFactors.map((factor) => (
+                      <div key={factor.key} className="rounded-lg border border-red-100 bg-red-50/60 p-3">
+                        <p className="text-sm font-semibold text-navy-900">{factor.name}</p>
+                        <p className="mt-0.5 text-xs font-medium text-red-700">
+                          {factor.score}/100 · {factor.severity} · {Math.round(factor.probability * 100)}% probability
+                        </p>
+                        <p className="mt-1 text-xs leading-relaxed text-gray-600">{factor.explanation}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {report?.dataQuality && (
+                <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/50 p-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-blue-700">Data completeness</span>
+                    <span className="font-semibold text-blue-700">{report.dataQuality.completeness}%</span>
+                  </div>
+                  <ProgressBar
+                    value={report.dataQuality.completeness}
+                    color={getProgressColor(report.dataQuality.completeness)}
+                    size="sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-600">
+                    {report.dataQuality.availableFactors}/{report.dataQuality.totalFactors} factors have evidence · weighted confidence {report.confidence}%
+                  </p>
+                </div>
+              )}
+
+              {(report?.interactions?.length || 0) > 0 && (
                 <div className="mt-4 space-y-1.5">
                   <p className="text-xs font-semibold uppercase tracking-widest text-purple-600">
                     Risk interactions & compounding effects
                   </p>
-                  {project.riskReport!.interactions.map((it: any) => (
+                  {report!.interactions.map((it) => (
                     <div
                       key={it.key}
                       className="flex items-start gap-2 rounded-lg bg-purple-50/60 p-2.5 text-sm text-gray-700"
@@ -488,18 +590,74 @@ export default function ProjectDetails() {
                       <span className="mt-0.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-purple-500" />
                       <span>
                         <span className="font-semibold">{it.name}</span> (+{it.penalty} risk points)
-                        — {it.reason}
+                        {' — '}
+                        {it.explanation}
+                        {it.triggeredConditions.length > 0 && (
+                          <span className="mt-1 block text-xs text-gray-500">
+                            Conditions: {it.triggeredConditions.join(', ')}
+                          </span>
+                        )}
                       </span>
                     </div>
                   ))}
                 </div>
               )}
 
-              {(project.riskReport?.missingData?.length || 0) > 0 && (
+              {(report?.blockers?.length || 0) > 0 && (
+                <div className="mt-4 space-y-1.5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-red-600">
+                    Blockers and minimum scores
+                  </p>
+                  {report!.blockers.map((blocker) => (
+                    <div key={blocker.key} className="rounded-lg border border-red-100 bg-red-50/60 p-2.5">
+                      <p className="text-xs font-semibold text-red-700">
+                        {blocker.level} blocker · minimum score {blocker.minimumScore}/100
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-700">{blocker.explanation}</p>
+                      <p className="mt-0.5 text-xs text-gray-600">Action: {blocker.recommendation}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4">
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+                  Factor scores
+                </p>
+                <div className="mt-2 space-y-2">
+                  {(report?.factors || []).map((factor) => (
+                    <details key={factor.key} className="rounded-lg border border-gray-200 bg-white p-3">
+                      <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="font-semibold text-navy-900">{factor.name}</span>
+                        <span className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-semibold text-gray-700">{factor.score}/100</span>
+                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
+                            {factor.severity}
+                          </span>
+                          <span className={factor.dataAvailable ? 'text-green-600' : 'text-amber-600'}>
+                            {factor.dataAvailable ? 'Evidence available' : 'Data missing'}
+                          </span>
+                        </span>
+                      </summary>
+                      <div className="mt-2 space-y-1 text-xs text-gray-600">
+                        <p>
+                          Probability {Math.round(factor.probability * 100)}% · Impact {Math.round(factor.impact * 100)}% · Weight {factor.weight}% · Contribution {factor.contribution}
+                        </p>
+                        <p>{factor.explanation}</p>
+                        {factor.triggeredConditions.length > 0 && (
+                          <p>Triggered conditions: {factor.triggeredConditions.join('; ')}</p>
+                        )}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </div>
+
+              {(report?.missingData?.length || 0) > 0 && (
                 <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
                   <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
                   <p className="text-xs text-amber-700">
-                    Limited data for: {project.riskReport!.missingData.join(', ')}. Neutral
+                    Limited data for: {(report?.dataQuality?.missingFactorNames || report!.missingData).join(', ')}. Neutral
                     baselines applied - dry up these fields to raise confidence.
                   </p>
                 </div>
@@ -618,7 +776,11 @@ export default function ProjectDetails() {
           predictedCompletion={project.predictedCompletion}
           delayMonths={delayMonths}
           delayProbability={project.delayProbability}
-          progressGap={project.plannedProgress - project.physicalProgress}
+          progressGap={
+            project.plannedProgress !== null && project.physicalProgress !== null
+              ? project.plannedProgress - project.physicalProgress
+              : null
+          }
         />
       </div>
 
@@ -731,9 +893,25 @@ export default function ProjectDetails() {
               </div>
             )}
 
-            {/* ML Risk Forecast */}
-            {aiInsights.prediction?.ml_forecast && (
+            {/* ML Risk Forecast - availability is reported from the backend,
+                never inferred from the presence of a stale cached forecast. */}
+            {aiInsights.prediction?.ml_forecast && mlStatus?.available ? (
               <MlRiskForecast forecast={aiInsights.prediction.ml_forecast} />
+            ) : (
+              <div className="mb-5 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+                    ML Unavailable
+                  </span>
+                  <p className="text-xs text-gray-600">
+                    The PARIKSHAN model is not loaded, so no ML forecast is shown.
+                    {mlStatus?.error ? ` (${mlStatus.error})` : ''}
+                  </p>
+                </div>
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Risk scores above are the deterministic Layer 1 engine and are unaffected.
+                </p>
+              </div>
             )}
             {aiInsights.explanation && (
               <div className="mb-5 rounded-lg border border-purple-100 bg-white p-4">
@@ -782,12 +960,12 @@ export default function ProjectDetails() {
                     const Icon = anomaly.severity === 'CRITICAL' ? AlertOctagon : anomaly.severity === 'HIGH' ? AlertTriangle : AlertCircle;
                     return (
                       <div
-                        key={i}
+                        key={anomaly.id || i}
                         className={`rounded-lg border p-3 ${sevColors[anomaly.severity] || sevColors.MEDIUM}`}
                       >
                         <div className="flex items-start gap-2">
                           <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${sevText[anomaly.severity] || sevText.MEDIUM}`} />
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-sm font-semibold text-navy-900">{anomaly.title}</span>
                               <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${sevText[anomaly.severity] || sevText.MEDIUM}`}>
@@ -796,6 +974,15 @@ export default function ProjectDetails() {
                             </div>
                             <p className="mt-0.5 text-xs text-gray-600">{anomaly.description}</p>
                           </div>
+                          {anomaly.id && !anomaly.resolved && (
+                            <button
+                              onClick={() => handleResolveAnomaly(anomaly.id)}
+                              disabled={resolvingId === anomaly.id}
+                              className="shrink-0 rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              {resolvingId === anomaly.id ? 'Resolving...' : 'Resolve'}
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -821,7 +1008,7 @@ export default function ProjectDetails() {
                     const Icon = er.severity === 'CRITICAL' ? AlertOctagon : er.severity === 'HIGH' ? AlertTriangle : AlertCircle;
                     return (
                       <div
-                        key={i}
+                        key={er.id || i}
                         className={`rounded-lg border p-3 ${sevColors[er.severity] || sevColors.MEDIUM}`}
                       >
                         <div className="flex items-start gap-2">
@@ -850,6 +1037,15 @@ export default function ProjectDetails() {
                               </div>
                             )}
                           </div>
+                          {er.id && er.status !== 'RESOLVED' && (
+                            <button
+                              onClick={() => handleResolveEmergingRisk(er.id)}
+                              disabled={resolvingId === er.id}
+                              className="shrink-0 rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              {resolvingId === er.id ? 'Resolving...' : 'Resolve'}
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -991,9 +1187,9 @@ export default function ProjectDetails() {
       </section>
 
       <RiskFactorChart
-        data={riskDrivers}
-        title="What is driving the risk?"
-        description="Relative contribution of the 15 assessed risk factors to this project's overall score."
+        data={riskFactorChartData}
+        title="Top risk factors"
+        description="Factor scores ranked by the server risk engine; missing evidence is shown in grey."
       />
 
       {id && (

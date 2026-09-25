@@ -34,10 +34,13 @@ class ProjectResponse(BaseModel):
     contactInfo: Optional[str] = None
     originalCost: float
     currentCost: float
-    expenditure: float
-    physicalProgress: float
+    # Optional because a source may simply not publish these. A NULL means
+    # "not reported"; it is never substituted with 0, which would read as a
+    # real measurement. Layer 1 treats a NULL as no evidence.
+    expenditure: Optional[float] = None
+    physicalProgress: Optional[float] = None
     financialProgress: Optional[float] = None
-    plannedProgress: float
+    plannedProgress: Optional[float] = None
     startDate: str
     expectedCompletion: str
     predictedCompletion: str
@@ -48,8 +51,11 @@ class ProjectResponse(BaseModel):
     riskLevel: str
     milestonesTotal: int
     milestonesDelayed: int
-    lat: float
-    lng: float
+    # Most government project portals publish no coordinates. NULL is the
+    # honest value; 0,0 is a real point in the Gulf of Guinea and must not be
+    # used as a stand-in.
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     riskFactors: list[str]
     recommendations: list[str]
     riskConfidence: Optional[float] = None
@@ -70,6 +76,28 @@ class ProjectResponse(BaseModel):
         from_attributes = True
 
 
+class RiskDataQualityResponse(BaseModel):
+    totalFactors: int = 0
+    availableFactors: int = 0
+    missingFactors: int = 0
+    completeness: int = 0
+    weightedCompleteness: int = 0
+    availableFactorKeys: list[str] = Field(default_factory=list)
+    missingFactorKeys: list[str] = Field(default_factory=list)
+    missingFactorNames: list[str] = Field(default_factory=list)
+
+
+class RiskScoreBreakdownResponse(BaseModel):
+    weightedBase: float = 0.0
+    interactionPenalty: int = 0
+    interactionPenaltyConfigured: int = 0
+    interactionPenaltyCap: int = 0
+    dominantFactorBoost: float = 0.0
+    blockerFloor: int = 0
+    rawScore: int = 0
+    finalScore: int = 0
+
+
 class RiskFactorResponse(BaseModel):
     key: str
     name: str
@@ -81,6 +109,9 @@ class RiskFactorResponse(BaseModel):
     severity: str
     reason: str
     dataAvailable: bool
+    factor: Optional[str] = None
+    explanation: Optional[str] = None
+    triggeredConditions: list[str] = Field(default_factory=list)
 
 
 class RiskInteractionResponse(BaseModel):
@@ -88,6 +119,21 @@ class RiskInteractionResponse(BaseModel):
     name: str
     penalty: int
     reason: str
+    trigger: Optional[str] = None
+    affectedFactors: list[str] = Field(default_factory=list)
+    triggeredConditions: list[str] = Field(default_factory=list)
+    explanation: Optional[str] = None
+
+
+class RiskBlockerResponse(BaseModel):
+    key: str
+    level: str
+    reason: str
+    recommendation: str
+    blocker: Optional[str] = None
+    severity: Optional[str] = None
+    minimumScore: int = 0
+    explanation: Optional[str] = None
 
 
 class RiskAssessmentResponse(BaseModel):
@@ -100,10 +146,21 @@ class RiskAssessmentResponse(BaseModel):
     criticalBlockerReasons: list[str]
     factors: list[RiskFactorResponse]
     interactions: list[RiskInteractionResponse]
+    blockers: list[RiskBlockerResponse] = Field(default_factory=list)
     topRisks: list[str]
+    topRiskFactors: list[RiskFactorResponse] = Field(default_factory=list)
     recommendations: list[str]
     explanations: list[str]
     missingData: list[str]
+    dataQuality: RiskDataQualityResponse = Field(default_factory=RiskDataQualityResponse)
+    assessmentStatus: str = "UNKNOWN"
+    riskLevelProvisional: bool = False
+    interactionPenalty: int = 0
+    blockerFloor: int = 0
+    scoreBreakdown: Optional[RiskScoreBreakdownResponse] = None
+    engineVersion: Optional[str] = None
+    contractVersion: Optional[str] = None
+    assessedAt: Optional[str] = None
     riskTrend: Optional[dict] = None
     costOverrunProbability: int
     delayProbability: int

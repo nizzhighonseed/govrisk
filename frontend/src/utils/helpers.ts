@@ -3,6 +3,20 @@ export function formatCurrency(amount: number): string {
   return `₹${formatted} Cr`;
 }
 
+/**
+ * Shown when a government source never published a measurement. A real 0 is
+ * rendered normally — "not reported" and "zero" are different facts.
+ */
+export const NO_DATA_LABEL = 'Not reported';
+
+export function formatCurrencyNullable(amount: number | null | undefined): string {
+  return amount == null ? NO_DATA_LABEL : formatCurrency(amount);
+}
+
+export function formatPercentNullable(value: number | null | undefined): string {
+  return value == null ? NO_DATA_LABEL : `${Math.round(value)}%`;
+}
+
 export function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleDateString('en-GB', {

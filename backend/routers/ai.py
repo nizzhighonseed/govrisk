@@ -105,19 +105,23 @@ def project_prediction(
 @router.get("/projects/{project_id}/anomalies")
 def project_anomalies(
     project_id: str,
+    include_resolved: bool = False,
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
+    """Open anomalies of the latest analysis batch by default.
+
+    `include_resolved=true` additionally returns the historical, already
+    resolved records. Each item carries its `id` so the client can address
+    the resolve endpoint.
+    """
     from models import Anomaly
 
     _project_or_404(db, project_id)
-    rows = (
-        db.query(Anomaly)
-        .filter(Anomaly.project_id == project_id)
-        .order_by(Anomaly.created_at.desc())
-        .limit(20)
-        .all()
-    )
+    query = db.query(Anomaly).filter(Anomaly.project_id == project_id)
+    if not include_resolved:
+        query = query.filter(Anomaly.resolved.is_(False))
+    rows = query.order_by(Anomaly.created_at.desc()).limit(50).all()
     from ai.ai_service import _anomaly_to_dict
 
     return [_anomaly_to_dict(r) for r in rows]

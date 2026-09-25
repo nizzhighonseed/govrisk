@@ -49,6 +49,38 @@ describe('adaptRiskMapPoints', () => {
     expect(() => adaptRiskMapPoints(sneaky)).toThrow();
   });
 
+  it('drops a project whose coordinates the source never reported', () => {
+    // A null coordinate is a fact about the data, not a parse error: one
+    // unlocated project must not blank the whole risk map.
+    const payload = [{ ...VALID_POINTS[0], lat: null, lng: null }];
+    expect(adaptRiskMapPoints(payload)).toEqual([]);
+  });
+
+  it('keeps plottable projects when a sibling has no coordinates', () => {
+    const payload = [
+      { ...VALID_POINTS[0], id: 'P-NOCOORD', lat: null, lng: null },
+      { ...VALID_POINTS[0], id: 'P-2', lat: 12.97, lng: 79.58 },
+    ];
+    const points = adaptRiskMapPoints(payload);
+    expect(points).toHaveLength(1);
+    expect(points[0].id).toBe('P-2');
+  });
+
+  it('drops a half-specified coordinate pair', () => {
+    const payload = [{ ...VALID_POINTS[0], lat: 19.1, lng: null }];
+    expect(adaptRiskMapPoints(payload)).toEqual([]);
+  });
+
+  it('never plots (0, 0), which is a real point in the Gulf of Guinea', () => {
+    const payload = [{ ...VALID_POINTS[0], lat: 0, lng: 0 }];
+    expect(adaptRiskMapPoints(payload)).toEqual([]);
+  });
+
+  it('still plots a genuine zero on one axis', () => {
+    const payload = [{ ...VALID_POINTS[0], lat: 0, lng: 78.9 }];
+    expect(adaptRiskMapPoints(payload)).toHaveLength(1);
+  });
+
   it('maps government-ingest provenance onto the point', () => {
     const points = adaptRiskMapPoints([
       {

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { getDashboard, getProjects, getAnalytics, getAiInsights } from '../services/api';
 import type { AiInsights } from '../services/api';
+import type { DashboardResponse, Project } from '../types';
 import { KpiCard } from '../components/ui/KpiCard';
 import { RiskBadge } from '../components/ui/RiskBadge';
 import { RiskScore } from '../components/ui/RiskScore';
@@ -46,8 +47,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { t } = useI18n();
   const [activeSector, setActiveSector] = useState('All Sectors');
-  const [dashboard, setDashboard] = useState<any>(null);
-  const [projects, setProjects] = useState<any[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +93,7 @@ export default function Dashboard() {
       .finally(() => setAiLoading(false));
   }, [projects]);
 
-  if (loading) {
+  if (loading || !dashboard) {
     return (
       <div className="min-w-0">
         <div className="mb-6">
@@ -234,7 +235,7 @@ export default function Dashboard() {
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[1120px] text-left text-sm">
             <thead>
               <tr className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
                 <th className="px-4 py-3 font-semibold lg:px-6">{t('table.project')}</th>
@@ -245,13 +246,17 @@ export default function Dashboard() {
                 <th className="px-4 py-3 font-semibold">{t('table.costOverrun')}</th>
                 <th className="px-4 py-3 font-semibold">{t('table.delayProb')}</th>
                 <th className="px-4 py-3 font-semibold">{t('table.riskScore')}</th>
+                <th className="px-4 py-3 font-semibold">{t('table.topDriver')}</th>
+                <th className="px-4 py-3 font-semibold">{t('table.dataQuality')}</th>
                 <th className="px-4 py-3 font-semibold">{t('table.status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {highRiskProjects.map((project: any) => {
+              {highRiskProjects.map((project: Project) => {
                 const costOverrun =
                   ((project.currentCost - project.originalCost) / project.originalCost) * 100;
+                const topFactor = project.riskReport?.topRiskFactors?.[0];
+                const dataQuality = project.riskReport?.dataQuality;
                 return (
                   <tr
                     key={project.id}
@@ -289,6 +294,12 @@ export default function Dashboard() {
                     </td>
                     <td className="px-4 py-3">
                       <RiskScore score={project.riskScore} size="sm" />
+                    </td>
+                    <td className="max-w-[200px] px-4 py-3 text-xs text-gray-700">
+                      {topFactor ? `${topFactor.name} (${topFactor.score}/100)` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-700">
+                      {dataQuality ? `${dataQuality.completeness}% complete` : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <RiskBadge level={project.riskLevel} size="sm" />

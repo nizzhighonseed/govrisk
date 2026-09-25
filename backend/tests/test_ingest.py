@@ -124,7 +124,11 @@ class DataGovInTests(unittest.TestCase):
         self.assertEqual(len(projects), 1)
         p = projects[0]
         self.assertEqual(p.externalRef, "abc123")
-        self.assertEqual(p.costEstimateCr, 12500.0)
+        # An "approved" cost is the SANCTIONED figure. It must land in
+        # originalCostCr, not be reused as the revised estimate - reusing one
+        # source column for both is what made cost overrun identically zero.
+        self.assertEqual(p.originalCostCr, 12500.0)
+        self.assertIsNone(p.costEstimateCr)
         self.assertEqual(p.sector, "Road Transport")
         self.assertEqual(p.stateName, "Uttar Pradesh")
         self.assertEqual(p.scale().value, "LARGE")

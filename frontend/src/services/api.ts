@@ -1,3 +1,5 @@
+import type { DashboardResponse, Project, RiskAssessment } from '../types';
+
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function getAccessToken(): string | null {
@@ -236,15 +238,15 @@ export function getAuditLogs(params: AuditLogParams = {}) {
 
 // Project API
 export async function getProjects() {
-  return apiFetch<any[]>('/api/projects');
+  return apiFetch<Project[]>('/api/projects');
 }
 
 export async function getProject(id: string) {
-  return apiFetch<any>(`/api/projects/${id}`);
+  return apiFetch<Project>(`/api/projects/${id}`);
 }
 
 export async function getProjectRisk(id: string) {
-  return apiFetch<any>(`/api/projects/${id}/risk`);
+  return apiFetch<RiskAssessment>(`/api/projects/${id}/risk`);
 }
 
 export interface ProjectCreateData {
@@ -322,7 +324,7 @@ export async function getAlerts() {
 }
 
 export async function getDashboard() {
-  return apiFetch<any>('/api/dashboard');
+  return apiFetch<DashboardResponse>('/api/dashboard');
 }
 
 export async function getAnalytics() {
@@ -391,16 +393,23 @@ export interface AiMlForecast {
 }
 
 export interface AiAnomaly {
+  id: string;
   type: string;
   severity: string;
   score: number;
   title: string;
   description: string;
   evidence: string[];
+  resolved?: boolean;
+  resolution_source?: 'USER' | 'AUTO' | null;
+  batch_id?: string | null;
+  last_seen_at?: string;
+  resolved_at?: string | null;
   generated_at?: string;
 }
 
 export interface AiEmergingRisk {
+  id: string;
   category: string;
   title: string;
   confidence: number;
@@ -410,6 +419,7 @@ export interface AiEmergingRisk {
   recommended_actions: string[];
   source_update_ids: number[];
   status?: string;
+  resolved_at?: string | null;
   generated_at?: string;
 }
 
@@ -456,8 +466,9 @@ export function getAiMlStatus() {
   }>('/api/ai/ml-status');
 }
 
-export function getAiAnomalies(projectId: string) {
-  return apiFetch<AiAnomaly[]>(`/api/ai/projects/${projectId}/anomalies`);
+export function getAiAnomalies(projectId: string, includeResolved = false) {
+  const query = includeResolved ? '?include_resolved=true' : '';
+  return apiFetch<AiAnomaly[]>(`/api/ai/projects/${projectId}/anomalies${query}`);
 }
 
 export function getAiEmergingRisks(projectId: string) {

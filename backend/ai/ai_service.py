@@ -42,6 +42,11 @@ from ai.anomaly_detector import detect_anomalies, top_anomaly
 from ai import emerging_risk
 from ai import llm_service
 
+# Anomaly closure provenance: an officer acknowledged the anomaly (USER), or
+# the condition stopped being detected (AUTO).
+RESOLUTION_USER = "USER"
+RESOLUTION_AUTO = "AUTO"
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -158,18 +163,25 @@ def _safe_json(raw, fallback):
 
 def _anomaly_to_dict(record) -> dict:
     return {
+        "id": record.id,
         "type": record.type,
         "severity": record.severity,
         "score": record.score,
         "title": record.title,
         "description": record.description,
         "evidence": _safe_json(record.evidence, []),
+        "resolved": bool(record.resolved),
+        "resolution_source": record.resolution_source,
+        "batch_id": record.batch_id,
+        "last_seen_at": record.last_seen_at or record.created_at,
+        "resolved_at": record.resolved_at,
         "generated_at": record.created_at,
     }
 
 
 def _risk_to_dict(record) -> dict:
     return {
+        "id": record.id,
         "category": record.category,
         "title": record.title,
         "confidence": record.confidence,
@@ -179,16 +191,42 @@ def _risk_to_dict(record) -> dict:
         "recommended_actions": _safe_json(record.recommendations, []),
         "source_update_ids": _safe_json(record.source_update_ids, []),
         "status": record.status,
+        "resolved_at": getattr(record, "resolved_at", None),
         "generated_at": record.created_at,
     }
 
 
 def _recent_anomalies(db: Session, project_id: str) -> list:
-    rows = db.query(Anomaly).filter(Anomaly.project_id == project_id).all()
-    if not rows:
+    """Anomalies of the newest analysis batch that are still open.
+
+    The batch is identified by `batch_id` (one id per analysis run) rather
+    than by `created_at` string equality, so a single analysis that detected
+    several anomaly types returns all of them. Rows a user already resolved
+    are excluded, and the result is ordered oldest-first for stable display.
+    """
+    newest = (
+        db.query(Anomaly.batch_id, Anomaly.last_seen_at)
+        .filter(
+            Anomaly.project_id == project_id,
+            Anomaly.resolved.is_(False),
+            Anomaly.batch_id.isnot(None),
+        )
+        .order_by(Anomaly.last_seen_at.desc(), Anomaly.created_at.desc())
+        .first()
+    )
+    if newest is None or not newest.batch_id:
         return []
-    latest = max(r.created_at for r in rows)
-    return [_anomaly_to_dict(r) for r in rows if r.created_at == latest]
+    rows = (
+        db.query(Anomaly)
+        .filter(
+            Anomaly.project_id == project_id,
+            Anomaly.batch_id == newest.batch_id,
+            Anomaly.resolved.is_(False),
+        )
+        .order_by(Anomaly.created_at.asc(), Anomaly.id.asc())
+        .all()
+    )
+    return [_anomaly_to_dict(r) for r in rows]
 
 
 def _active_emerging_risks(db: Session, project_id: str) -> list:
@@ -320,22 +358,113 @@ def persist_prediction(db: Session, project_id: str, result: PredictionResult) -
     return record
 
 
-def persist_anomalies(db: Session, project_id: str, anomalies: list) -> None:
-    for a in anomalies:
-        db.add(
-            Anomaly(
-                id=str(uuid.uuid4()),
-                project_id=project_id,
-                created_at=_now_iso(),
-                type=a["type"],
-                severity=a["severity"],
-                score=a["score"],
-                title=a["title"],
-                description=a["description"],
-                evidence=json.dumps(a.get("evidence", [])),
-                resolved=False,
-            )
+def persist_anomalies(db: Session, project_id: str, anomalies: list, batch_id: str) -> None:
+    """Apply one analysis batch to the anomaly lifecycle.
+
+    Deterministic rules, one open row per (project, anomaly type):
+    - a newly detected type creates one row tagged with this `batch_id`;
+    - a type that is still detected refreshes its existing open row (score,
+      severity, evidence, `batch_id`, `last_seen_at`) instead of inserting a
+      duplicate;
+    - any other open row is *resolved*, never deleted, so the detection
+      history and its original `created_at` survive;
+    - a type whose latest row was resolved BY A USER stays resolved and is only
+      re-stamped with `last_seen_at`: acknowledging an anomaly must not be
+      undone by a re-analysis that detects the same unchanged condition.
+      A type closed automatically (the condition had gone away) does re-open
+      as a new row when it genuinely re-appears.
+
+    Pre-existing duplicate open rows (databases that accumulated one row per
+    run) are collapsed: the earliest row per type stays open, the rest are
+    resolved.
+    """
+    now = _now_iso()
+    open_rows = (
+        db.query(Anomaly)
+        .filter(Anomaly.project_id == project_id, Anomaly.resolved.is_(False))
+        .order_by(Anomaly.created_at.asc(), Anomaly.id.asc())
+        .all()
+    )
+    by_type: dict[str, list] = {}
+    for row in open_rows:
+        by_type.setdefault(row.type, []).append(row)
+    # Collapse legacy duplicates: keep the earliest, resolve the rest.
+    for atype, rows in by_type.items():
+        for extra in rows[1:]:
+            extra.resolved = True
+            extra.resolved_at = now
+            extra.resolution_source = RESOLUTION_AUTO
+
+    # Latest row per type, used to honour an outstanding user dismissal.
+    latest_by_type: dict[str, Anomaly] = {}
+    for row in open_rows:
+        latest_by_type.setdefault(row.type, row)
+    for atype in {a["type"] for a in anomalies}:
+        if atype in latest_by_type:
+            continue
+        previous = (
+            db.query(Anomaly)
+            .filter(Anomaly.project_id == project_id, Anomaly.type == atype)
+            .order_by(Anomaly.created_at.desc(), Anomaly.id.desc())
+            .first()
         )
+        if previous is not None:
+            latest_by_type[atype] = previous
+
+    seen: set[str] = set()
+    for a in anomalies:
+        atype = a["type"]
+        seen.add(atype)
+        existing = by_type.get(atype, [])
+        row = existing[0] if existing else None
+        if row is None:
+            dismissed = latest_by_type.get(atype)
+            if (
+                dismissed is not None
+                and dismissed.resolved
+                and dismissed.resolution_source == RESOLUTION_USER
+            ):
+                # Still detected, but an officer already closed it: keep it
+                # closed and only record that the condition persists.
+                dismissed.last_seen_at = now
+                continue
+            db.add(
+                Anomaly(
+                    id=str(uuid.uuid4()),
+                    project_id=project_id,
+                    created_at=now,
+                    type=atype,
+                    severity=a["severity"],
+                    score=a["score"],
+                    title=a["title"],
+                    description=a["description"],
+                    evidence=json.dumps(a.get("evidence", [])),
+                    resolved=False,
+                    batch_id=batch_id,
+                    last_seen_at=now,
+                    resolved_at=None,
+                    resolution_source=None,
+                )
+            )
+            continue
+        row.severity = a["severity"]
+        row.score = a["score"]
+        row.title = a["title"]
+        row.description = a["description"]
+        row.evidence = json.dumps(a.get("evidence", []))
+        row.batch_id = batch_id
+        row.last_seen_at = now
+        row.resolved = False
+        row.resolved_at = None
+        row.resolution_source = None
+
+    for atype, rows in by_type.items():
+        if atype in seen:
+            continue
+        for row in rows:
+            row.resolved = True
+            row.resolved_at = now
+            row.resolution_source = RESOLUTION_AUTO
 
 
 def persist_emerging_risks(db: Session, project_id: str, risks: list) -> None:
@@ -423,7 +552,11 @@ def project_for_analyze(db: Session, project_id: str):
 # --------------------------------------------------------------------------
 def _persist_ml_snapshot(db: Session, project_id: str, ml: dict) -> None:
     """Persist a single ML prediction snapshot (used for edge-triggered
-    early-warning detection across successive analyses)."""
+    early-warning detection across successive analyses).
+
+    The artifact fingerprint is stored alongside the numbers so a later run
+    can only compare snapshots produced by the same model version.
+    """
     from models import MLSnapshot
 
     db.add(
@@ -441,17 +574,29 @@ def _persist_ml_snapshot(db: Session, project_id: str, ml: dict) -> None:
                 "severe_overrun_probability", "expected_cost_overrun_pct",
                 "expected_time_overrun_months",
             )}),
+            model_version=ml.get("model_version"),
         )
     )
 
 
-def _previous_ml_snapshot(db: Session, project_id: str):
-    """Return the most recent previous snapshot (or None on first run)."""
+def _previous_ml_snapshot(db: Session, project_id: str, model_version: str | None = None):
+    """Most recent snapshot of the *current* model version, or None.
+
+    Snapshots written before provenance was recorded (and snapshots from a
+    different artifact fingerprint) are intentionally ignored: a delta across
+    model versions is not a real escalation, and a stale snapshot must never
+    be presented as current ML output.
+    """
     from models import MLSnapshot
 
+    if not model_version:
+        return None
     return (
         db.query(MLSnapshot)
-        .filter(MLSnapshot.project_id == project_id)
+        .filter(
+            MLSnapshot.project_id == project_id,
+            MLSnapshot.model_version == model_version,
+        )
         .order_by(MLSnapshot.created_at.desc())
         .first()
     )
@@ -553,7 +698,6 @@ def analyze_project(db: Session, project_id: str) -> InsightsResponse:
 
     features = build_features(project, updates, alerts, previous_score)
     prediction = predict(project, updates, alerts, previous_score)
-
     # PARIKSHAN ML forecast — additive, never overwrites deterministic
     # schedule/cost/risk fields.
     try:
@@ -569,22 +713,30 @@ def analyze_project(db: Session, project_id: str) -> InsightsResponse:
         prediction.model_version = ml_dict["model_version"]
         prediction.top_drivers = ml_dict["top_drivers"]
         prediction.data_points_used = ml_dict["data_points_used"]
-        previous_snapshot = _previous_ml_snapshot(db, project_id)
+        previous_snapshot = _previous_ml_snapshot(db, project_id, ml_dict["model_version"])
         _persist_ml_snapshot(db, project_id, ml_dict)
         _emit_ml_early_warning_alerts(db, project_id, ml_dict, previous_snapshot)
 
-    anomaly_records = detect_anomalies(project, updates, alerts)
-    persist_anomalies(db, project_id, anomaly_records)
+    # One analysis = one anomaly batch. Every anomaly detected below shares
+    # this id, and the previous canonical Layer 1 score is threaded into the
+    # detector so RISK_JUMP can actually be evaluated.
+    batch_id = str(uuid.uuid4())
+    anomaly_records = detect_anomalies(project, updates, alerts, previous_score)
+    persist_anomalies(db, project_id, anomaly_records, batch_id)
     persist_prediction(db, project_id, prediction)
 
     emerging_records = emerging_risk.extract_from_updates(updates)
     persist_emerging_risks(db, project_id, emerging_records)
 
     explanation = _build_explanation(db, project, prediction)
+    # Flush first (the session disables autoflush) so the response carries the
+    # same persisted anomaly shape - including `id`/`resolved` - as the cached
+    # path served by GET /insights.
+    db.flush()
     insights = build_insights(
         db, project,
         prediction_result=prediction,
-        anomaly_records=anomaly_records,
+        anomaly_records=_recent_anomalies(db, project_id),
         emerging_records=_active_emerging_risks(db, project_id),
         explanation=explanation,
         analysis_kind="fresh",
@@ -725,7 +877,7 @@ def resolve_emerging_risk(db: Session, project_id: str, risk_id: str) -> bool:
     if not record:
         return False
     record.status = "RESOLVED"
-    record.updated_at = _now_iso()
+    record.resolved_at = _now_iso()
     db.commit()
     return True
 
@@ -743,7 +895,8 @@ def resolve_anomaly(db: Session, project_id: str, anomaly_id: str) -> bool:
     if not record:
         return False
     record.resolved = True
-    record.updated_at = _now_iso()
+    record.resolved_at = _now_iso()
+    record.resolution_source = RESOLUTION_USER
     db.commit()
     return True
 

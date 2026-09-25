@@ -48,12 +48,25 @@ const EVENT_TYPE_LABEL: Record<DisasterEvent['type'], string> = {
 // ---------------------------------------------------------------------------
 
 /**
+ * A project can only be pinned on the map when the source gave both
+ * coordinates. `null` means "not reported", and (0, 0) is a genuine location in
+ * the Gulf of Guinea that the backend rejects — so neither may become a marker.
+ */
+function isPlottable<T extends { lat: number | null; lng: number | null }>(
+  p: T,
+): p is T & { lat: number; lng: number } {
+  if (p.lat === null || p.lng === null) return false;
+  if (p.lat === 0 && p.lng === 0) return false;
+  return true;
+}
+
+/**
  * Validate + shape `/api/risk-map` payload into typed project points.
  * Throws a typed `PayloadError` when the wire format drifts.
  */
 export function adaptRiskMapPoints(raw: unknown): ProjectRiskPoint[] {
   const validated = rawRiskMapResponseSchema.parse(raw);
-  return validated.map((p) => ({
+  return validated.filter(isPlottable).map((p) => ({
     id: p.id,
     name: p.name,
     stateName: p.state,

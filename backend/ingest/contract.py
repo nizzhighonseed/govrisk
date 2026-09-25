@@ -10,7 +10,7 @@ map rendering.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -55,6 +55,18 @@ class RawProject(BaseModel):
 
     All date strings are ISO `YYYY-MM-DD`. Money is in INR crores. Fields that
     a source cannot provide stay `None` - never improvised or interpolated.
+
+    Cost fields carry distinct meanings and must not be collapsed:
+
+    - `originalCostCr`  the sanctioned/approved cost
+    - `costEstimateCr`  the CURRENT (revised/latest) estimate
+    - `costActualCr`    cumulative expenditure to date
+
+    Mapping `originalCostCr` and `costEstimateCr` to the same source field
+    makes cost overrun identically zero, which is a false all-clear rather
+    than a missing value. When a source publishes only one cost figure, set
+    that one field and leave the other `None`; the pipeline records the gap
+    instead of inventing the missing side.
     """
 
     name: str = Field(min_length=2, max_length=300)
@@ -67,8 +79,10 @@ class RawProject(BaseModel):
     startDate: Optional[str] = None
     plannedEndDate: Optional[str] = None
     actualEndDate: Optional[str] = None
+    originalCostCr: Optional[float] = Field(default=None, ge=0)
     costEstimateCr: Optional[float] = Field(default=None, ge=0)
     costActualCr: Optional[float] = Field(default=None, ge=0)
+    physicalProgressPct: Optional[float] = Field(default=None, ge=0, le=100)
     fundingSource: Optional[FundingSource] = None
     description: Optional[str] = None
     lat: Optional[float] = Field(default=None, ge=-90, le=90)
@@ -77,9 +91,41 @@ class RawProject(BaseModel):
     sourceUrl: Optional[str] = None
     retrievedDate: str = Field(min_length=10)
     confidence: DataConfidence = DataConfidence.UNVERIFIED
+    # The sector label exactly as the source published it. Kept so a
+    # source-specific mapping can be corrected later without going back to
+    # the source; the canonical `sector` above is only the GovRisk label.
+    sourceSector: Optional[str] = Field(default=None, max_length=200)
+    # Qualitative risk branches a source can legitimately supply. Merged into
+    # `Project.risk_inputs` under the ownership rules in `ingest.ownership`,
+    # never written over a human's value.
+    riskInputs: Optional[Dict[str, Any]] = None
+
+    def effective_cost_cr(self) -> Optional[float]:
+        """The cost that best represents the project today.
+
+        Prefers the current estimate, falls back to the original. `None`
+        when the source published neither.
+        """
+        if self.costEstimateCr is not None:
+            return self.costEstimateCr
+        return self.originalCostCr
+
+    def has_cost_revision(self) -> bool:
+        """True when the source published a cost that differs from the original."""
+        if self.originalCostCr is None or self.costEstimateCr is None:
+            return False
+        return self.originalCostCr != self.costEstimateCr
+
+    def has_coordinates(self) -> bool:
+        """True only when BOTH coordinates are present and usable.
+
+        A half-specified coordinate is not a location; treating it as one
+        places the project in the wrong hemisphere.
+        """
+        return self.lat is not None and self.lng is not None
 
     def scale(self) -> Optional[ProjectScale]:  # noqa: N802 (pydantic method name)
-        """Derive MEDIUM/LARGE from cost when not explicit.
+        """Derive MEDIUM/LARGE from the project's effective cost.
 
         Thresholds (documented with the platform):
         MEDIUM = INR 100-1000 Cr, LARGE > INR 1000 Cr.
@@ -88,7 +134,7 @@ class RawProject(BaseModel):
         """
         from .normalize import derive_scale
 
-        return derive_scale(self.costEstimateCr)
+        return derive_scale(self.effective_cost_cr())
 
 
 # Convenience re-exports used by the pipeline and call sites.

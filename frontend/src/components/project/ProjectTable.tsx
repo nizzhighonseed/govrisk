@@ -26,7 +26,7 @@ type SortDir = 'asc' | 'desc';
 
 const rankOfRisk = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 } as const;
 
-function cellValue(project: Project, key: SortKey): string | number {
+function cellValue(project: Project, key: SortKey): string | number | null {
   switch (key) {
     case 'riskLevel':
       return rankOfRisk[project.riskLevel];
@@ -92,6 +92,13 @@ export function ProjectTable({
     const sorted = [...projects].sort((a, b) => {
       const av = cellValue(a, sortKey);
       const bv = cellValue(b, sortKey);
+      // A missing measurement is not 0. JavaScript would coerce null into 0 and
+      // rank unreported projects as if they had no progress, so unreported rows
+      // are always pushed to the end of the list.
+      if (av === null || bv === null) {
+        if (av === bv) return 0;
+        return av === null ? 1 : -1;
+      }
       let cmp = 0;
       if (typeof av === 'string' && typeof bv === 'string') {
         cmp = av.localeCompare(bv);

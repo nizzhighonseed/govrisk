@@ -20,8 +20,11 @@ export const rawRiskMapPointSchema = z
     riskLevel: riskLevelSchema,
     costOverrunProbability: z.number().finite(),
     delayProbability: z.number().finite(),
-    lat: z.number().finite(),
-    lng: z.number().finite(),
+    // Coordinates are nullable: most government portals publish no location
+    // for a project, and the backend stores "not reported" as NULL rather than
+    // a fake 0,0. Unplottable points are dropped by the adapter, not rendered.
+    lat: z.number().finite().nullable(),
+    lng: z.number().finite().nullable(),
     // Government-ingest provenance (backend/ingest). Optional: manual projects
     // have no ingestion metadata.
     status: z.enum(['ONGOING', 'COMPLETED', 'DELAYED', 'STALLED', 'CANCELLED']).optional().nullable(),

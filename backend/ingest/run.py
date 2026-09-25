@@ -38,7 +38,7 @@ def main() -> None:
     if args.source == "data_gov_in":
         from ingest.sources.data_gov_in import DataGovInIngestor
 
-        ingestor = DataGovInIngestor()
+        ingestor = DataGovInIngestor(dry_run=args.dry_run)
     else:
         if not args.file:
             parser.error("--file is required for the csv_file source")
@@ -57,13 +57,19 @@ def main() -> None:
         return
 
     print(f"\nSource:          {summary.source}")
+    print(f"Scope floor:     INR {ingestor.scope.min_cost_cr:g} Cr ({ingestor.scope.label})")
     print(f"Total rows:      {summary.total}")
     print(f"Inserted:        {summary.inserted}")
     print(f"Updated:         {summary.updated}")
     print(f"Skipped:         {summary.skipped}")
     print(f"Rejected:        {summary.rejected}")
+    print(f"Failed:          {summary.failed}")
     if args.dry_run:
         print("\n(dry-run - nothing was written)")
+    if summary.warnings:
+        print(f"\nWarnings ({len(summary.warnings)}):")
+        for warning in summary.warnings:
+            print(f"  - {warning}")
 
 
 if __name__ == "__main__":

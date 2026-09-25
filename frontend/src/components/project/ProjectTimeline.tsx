@@ -1,13 +1,13 @@
 import { CheckCircle, Clock, AlertTriangle, Target } from 'lucide-react';
 import { useI18n } from '../../i18n';
-import { formatDate } from '../../utils/helpers';
+import { formatDate, NO_DATA_LABEL } from '../../utils/helpers';
 
 interface ProjectTimelineProps {
   expectedCompletion: string;
   predictedCompletion: string;
   delayMonths: number;
   delayProbability: number;
-  progressGap: number;
+  progressGap: number | null;
 }
 
 export function ProjectTimeline({
@@ -74,7 +74,9 @@ export function ProjectTimeline({
               <Target size={16} className="text-blue-500" />
               <span className="text-sm text-gray-500">{t('analytics.progressGap')}</span>
             </div>
-            <p className="mt-1 text-2xl font-bold text-navy-900">{progressGap}% behind</p>
+            <p className="mt-1 text-2xl font-bold text-navy-900">
+              {progressGap === null ? NO_DATA_LABEL : `${progressGap}% behind`}
+            </p>
           </div>
         </div>
       </div>

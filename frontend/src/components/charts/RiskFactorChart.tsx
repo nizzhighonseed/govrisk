@@ -8,23 +8,30 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import type { RiskFactor } from '../../types';
 
 interface RiskFactorChartProps {
-  data: Array<{ name: string; value: number }>;
+  data: Array<Pick<RiskFactor, 'key' | 'name' | 'score' | 'severity' | 'dataAvailable'>>;
   title?: string;
   description?: string;
 }
 
-function getBarColor(value: number) {
-  if (value > 80) return '#ef4444';
-  if (value > 60) return '#f97316';
-  if (value > 40) return '#eab308';
-  return '#3b82f6';
+const SEVERITY_COLORS: Record<string, string> = {
+  CRITICAL: '#ef4444',
+  HIGH: '#f97316',
+  MODERATE: '#eab308',
+  LOW: '#3b82f6',
+  'VERY LOW': '#3b82f6',
+};
+
+function getBarColor(entry: RiskFactorChartProps['data'][number]) {
+  if (!entry.dataAvailable) return '#cbd5e1';
+  return SEVERITY_COLORS[entry.severity] ?? '#3b82f6';
 }
 
 export function RiskFactorChart({
   data,
-  title = 'What is driving the risk?',
+  title = 'Top risk factors',
   description,
 }: RiskFactorChartProps) {
   return (
@@ -56,7 +63,7 @@ export function RiskFactorChart({
               tickLine={false}
             />
             <Tooltip
-              formatter={(value) => [`${value}`, 'Impact']}
+              formatter={(value) => [`${value}/100`, 'Factor score']}
               contentStyle={{
                 borderRadius: 8,
                 border: '1px solid #e5e7eb',
@@ -64,9 +71,9 @@ export function RiskFactorChart({
                 fontSize: 12,
               }}
             />
-            <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={22}>
+            <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={22}>
               {data.map((entry) => (
-                <Cell key={entry.name} fill={getBarColor(entry.value)} />
+                <Cell key={entry.key} fill={getBarColor(entry)} />
               ))}
             </Bar>
           </BarChart>

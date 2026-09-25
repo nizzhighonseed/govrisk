@@ -57,67 +57,6 @@ function parseNum(s: string): number {
   return isNaN(n) ? Number.NaN : n;
 }
 
-function round1(x: number) {
-  return Math.round(x * 10) / 10;
-}
-
-function clamp(v: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, v));
-}
-
-interface RiskPreview {
-  score: number;
-  level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  delayProbability: number;
-  costOverrunProbability: number;
-  factors: string[];
-}
-
-function previewRisk(v: FormState): RiskPreview | null {
-  const physicalRaw = parseNum(v.physicalProgress);
-  const costRaw = parseNum(v.originalCost);
-  if (isNaN(physicalRaw) || isNaN(costRaw) || costRaw <= 0) return null;
-  if (physicalRaw < 0 || physicalRaw > 100) return null;
-
-  const physical = clamp(physicalRaw, 0, 100);
-
-  let planned = physical;
-  const start = v.startDate ? new Date(v.startDate) : null;
-  const comp = v.completionDate ? new Date(v.completionDate) : null;
-  if (start && comp && !isNaN(start.getTime()) && !isNaN(comp.getTime()) && comp > start) {
-    const total = (comp.getTime() - start.getTime()) / 86400000;
-    const elapsed = (Date.now() - start.getTime()) / 86400000;
-    planned = clamp((elapsed / total) * 100, 0, 100);
-  }
-
-  const gap = Math.max(0, round1(planned - physical));
-  const revisedRaw =
-    v.revisedCost !== '' && !isNaN(parseNum(v.revisedCost)) ? parseNum(v.revisedCost) : costRaw;
-  const overrun = costRaw > 0 ? round1(((revisedRaw - costRaw) / costRaw) * 100) : 0;
-  const overrunPct = Math.max(0, overrun);
-
-  const finRaw = v.financialProgress !== '' ? parseNum(v.financialProgress) : null;
-  const finLag = finRaw !== null && !isNaN(finRaw) && physical - finRaw >= 10;
-
-  const delayProbability = Math.round(clamp(gap * 2.5 + (finLag ? 12 : 0), 0, 95));
-  const costOverrunProbability = Math.round(clamp(overrunPct * 2.0 + (finLag ? 8 : 0), 0, 95));
-  const score = Math.round(clamp(4 + gap * 2.0 + overrunPct * 1.6 + (finLag ? 12 : 0), 0, 100));
-  const level = score >= 80 ? 'CRITICAL' : score >= 60 ? 'HIGH' : score >= 40 ? 'MEDIUM' : 'LOW';
-
-  const factors: string[] = [];
-  if (gap > 5) factors.push(`Physical progress is ${gap.toFixed(0)}% behind planned progress`);
-  if (overrunPct > 5)
-    factors.push(`Cost has increased by ${overrunPct.toFixed(1)}% from original estimate`);
-  if (finLag)
-    factors.push(
-      'Financial progress is below physical progress, indicating an expenditure slowdown',
-    );
-  if (physical < 30) factors.push('Very low physical progress relative to project duration');
-  if (factors.length === 0) factors.push('Project is progressing broadly as planned');
-
-  return { score, level, delayProbability, costOverrunProbability, factors };
-}
-
 function ModalShell({
   open,
   onClose,
@@ -383,8 +322,6 @@ export default function AddProjectModal({
     }
   }
 
-  const risk = step === 'form' ? previewRisk(form) : null;
-
   function handleViewProject() {
     if (!created) return;
     handleClose();
@@ -632,57 +569,20 @@ export default function AddProjectModal({
             <Section
               number={5}
               icon={<ShieldAlert className="h-4 w-4 text-blue-600" />}
-              title="Risk Assessment (auto-calculated)"
+              title="Risk Assessment (server-calculated)"
             >
-              {risk ? (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                  <div className="mb-3 flex flex-wrap items-center gap-4">
-                    <div>
-                      <p className="text-xs text-gray-500">Risk Score</p>
-                      <p className="text-2xl font-bold text-navy-900">
-                        {risk.score}
-                        <span className="text-sm font-medium text-gray-400">/100</span>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="mb-1 text-xs text-gray-500">Risk Level</p>
-                      <RiskBadge level={risk.level} size="sm" />
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      <p>
-                        Delay probability:{' '}
-                        <span className="font-semibold text-navy-900">
-                          {risk.delayProbability}%
-                        </span>
-                      </p>
-                      <p>
-                        Cost overrun probability:{' '}
-                        <span className="font-semibold text-navy-900">
-                          {risk.costOverrunProbability}%
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                  <p className="mb-1 text-xs font-medium text-gray-500">Key Risk Factors</p>
-                  <ul className="space-y-1">
-                    {risk.factors.map((f, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-sm text-gray-600">
-                        <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-blue-500" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-3 text-xs text-gray-400">
-                    Rule-based preview. The backend is the source of truth and will recalculate on
-                    submission.
+              <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400" />
+                <div>
+                  <p className="text-sm text-gray-600">
+                    Risk is calculated by the backend after this project is saved.
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    The canonical score, level, factors, recommendations, and confidence are
+                    returned in the saved project response.
                   </p>
                 </div>
-              ) : (
-                <div className="flex items-center gap-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-500">
-                  <ShieldAlert className="h-5 w-5 text-gray-400" />
-                  Enter approved cost, progress and dates to preview the calculated risk.
-                </div>
-              )}
+              </div>
             </Section>
 
             <Section

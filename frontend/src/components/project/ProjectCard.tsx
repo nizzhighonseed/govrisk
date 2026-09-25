@@ -5,7 +5,7 @@ import type { Project } from '../../types';
 import { RiskScore } from '../ui/RiskScore';
 import { RiskBadge } from '../ui/RiskBadge';
 import { ProgressBar } from '../ui/ProgressBar';
-import { formatCurrency } from '../../utils/helpers';
+import { formatCurrency, formatPercentNullable } from '../../utils/helpers';
 
 interface ProjectCardProps {
   project: Project;
@@ -44,7 +44,9 @@ export function ProjectCard({ project, onSelect }: ProjectCardProps) {
 
       <div className="mb-1 flex items-center justify-between">
         <span className="text-xs text-gray-500">{t('projectCard.physicalProgress')}</span>
-        <span className="text-xs font-medium text-gray-700">{project.physicalProgress}%</span>
+        <span className="text-xs font-medium text-gray-700">
+          {formatPercentNullable(project.physicalProgress)}
+        </span>
       </div>
       <ProgressBar value={project.physicalProgress} />
 

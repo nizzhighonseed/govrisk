@@ -1,4 +1,5 @@
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+export type RiskAssessmentStatus = 'COMPLETE' | 'INSUFFICIENT_DATA' | 'UNKNOWN';
 
 export type Sector =
   'Transport' | 'Energy' | 'Water' | 'Communication' | 'Mining' | 'Social Infrastructure';
@@ -21,6 +22,7 @@ export interface RiskInputs {
 
 export interface RiskFactor {
   key: string;
+  factor: string;
   name: string;
   score: number;
   weight: number;
@@ -29,14 +31,53 @@ export interface RiskFactor {
   impact: number;
   severity: string;
   reason: string;
+  explanation: string;
+  triggeredConditions: string[];
   dataAvailable: boolean;
 }
 
 export interface RiskInteraction {
   key: string;
+  trigger: string;
   name: string;
+  affectedFactors: string[];
+  triggeredConditions: string[];
   penalty: number;
   reason: string;
+  explanation: string;
+}
+
+export interface RiskBlocker {
+  key: string;
+  blocker: string;
+  level: string;
+  severity: string;
+  minimumScore: number;
+  reason: string;
+  explanation: string;
+  recommendation: string;
+}
+
+export interface RiskDataQuality {
+  totalFactors: number;
+  availableFactors: number;
+  missingFactors: number;
+  completeness: number;
+  weightedCompleteness: number;
+  availableFactorKeys: string[];
+  missingFactorKeys: string[];
+  missingFactorNames: string[];
+}
+
+export interface RiskScoreBreakdown {
+  weightedBase: number;
+  interactionPenalty: number;
+  interactionPenaltyConfigured: number;
+  interactionPenaltyCap: number;
+  dominantFactorBoost: number;
+  blockerFloor: number;
+  rawScore: number;
+  finalScore: number;
 }
 
 export interface RiskAssessment {
@@ -49,10 +90,21 @@ export interface RiskAssessment {
   criticalBlockerReasons: string[];
   factors: RiskFactor[];
   interactions: RiskInteraction[];
+  blockers: RiskBlocker[];
   topRisks: string[];
+  topRiskFactors: RiskFactor[];
   recommendations: string[];
   explanations: string[];
   missingData: string[];
+  dataQuality: RiskDataQuality;
+  assessmentStatus: RiskAssessmentStatus;
+  riskLevelProvisional: boolean;
+  interactionPenalty: number;
+  blockerFloor: number;
+  scoreBreakdown?: RiskScoreBreakdown;
+  engineVersion?: string;
+  contractVersion?: string;
+  assessedAt?: string;
   riskTrend?: { available: boolean; note?: string };
   costOverrunProbability: number;
   delayProbability: number;
@@ -73,10 +125,16 @@ export interface Project {
   contactInfo?: string;
   originalCost: number;
   currentCost: number;
-  expenditure: number;
-  physicalProgress: number;
-  financialProgress?: number;
-  plannedProgress: number;
+  /**
+   * `null` means the source never reported the value. It is deliberately not
+   * coerced to 0, because 0 is a real measurement (no spend, no progress) and
+   * substituting it would silently fabricate evidence. Layer 1 scores a `null`
+   * as "no evidence" rather than "zero".
+   */
+  expenditure: number | null;
+  physicalProgress: number | null;
+  financialProgress?: number | null;
+  plannedProgress: number | null;
   startDate: string;
   expectedCompletion: string;
   predictedCompletion: string;
@@ -87,8 +145,12 @@ export interface Project {
   riskLevel: RiskLevel;
   milestonesTotal: number;
   milestonesDelayed: number;
-  lat: number;
-  lng: number;
+  /**
+   * Null when the portal publishes no coordinates. (0, 0) is a real point in
+   * the Gulf of Guinea, so it must never be used as a stand-in for "unknown".
+   */
+  lat: number | null;
+  lng: number | null;
   riskFactors: string[];
   recommendations: string[];
   riskConfidence?: number;
@@ -97,6 +159,17 @@ export interface Project {
   riskReport?: RiskAssessment;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface DashboardResponse {
+  totalProjects: number;
+  highRiskProjects: number;
+  scheduleRiskCount: number;
+  costRiskCount: number;
+  portfolioValue: number;
+  revisedValue: number;
+  riskDistribution: Record<string, number>;
+  highRiskTable: Project[];
 }
 
 export interface Alert {

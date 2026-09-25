@@ -44,13 +44,24 @@ _CONTRIBUTORS = (
 )
 
 
-def detect_anomalies(project, updates=None, alerts=None) -> List[dict]:
+def detect_anomalies(
+    project,
+    updates=None,
+    alerts=None,
+    previous_risk_score: float | None = None,
+) -> List[dict]:
     """Detect anomalies and return a detail list of anomaly records.
 
     Each record matches the AnomalyResult-friendly shape (plus a
     `type` identier) so the orchestrator can persist them.
+
+    `previous_risk_score` is the canonical Layer 1 risk score recorded by the
+    previous analysis. It is required for the RISK_JUMP rule: without it
+    `build_features` falls back to the current score and `risk_change` is
+    always 0, so the rule can never fire. No second risk score is computed
+    here - the caller passes the already-persisted previous value.
     """
-    features = build_features(project, updates, alerts)
+    features = build_features(project, updates, alerts, previous_risk_score)
     anomalies = []
     now = datetime.now(timezone.utc).isoformat()
 

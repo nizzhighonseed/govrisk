@@ -14,6 +14,9 @@ config file (or an ML model configuration) later without touching the
 engine.
 """
 
+ENGINE_VERSION = "1.0.0"
+RISK_CONTRACT_VERSION = "1.1.0"
+
 # 15 core risk factors and their weights. Total must equal 100.
 FACTOR_WEIGHTS = {
     "budget": 10,          # Budget & Cost Overrun
