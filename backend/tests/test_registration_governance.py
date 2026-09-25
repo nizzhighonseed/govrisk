@@ -16,7 +16,7 @@ Covers:
   actions are recorded
 
 All HTTP tests run against isolated temp databases (same pattern as
-test_auth_security); the developer's govrisk.db / auth.db are never written.
+test_auth_security); the developer's sankalp.db / auth.db are never written.
 The in-process rate limiter is reset before every test.
 """
 
@@ -59,7 +59,7 @@ def _patch_temp_dbs():
     import models  # noqa: F401 - register metadata on Base
     import auth.models  # noqa: F401 - register metadata on AuthBase
 
-    tmpdir = tempfile.mkdtemp(prefix="govrisk-reggov-")
+    tmpdir = tempfile.mkdtemp(prefix="sankalp-reggov-")
     _TMP_ENGINE = create_engine(
         "sqlite:///" + os.path.join(tmpdir, "test.db"),
         connect_args={"check_same_thread": False},
@@ -110,7 +110,7 @@ class RegistrationGovernanceApiTestCase(unittest.TestCase):
     # helpers
     # ------------------------------------------------------------------ #
     def _register(self, email=None, password="testpass123", **extra):
-        email = email or f"gov_{uuid.uuid4().hex[:10]}@govrisk.gov.in"
+        email = email or f"gov_{uuid.uuid4().hex[:10]}@sankalp.gov.in"
         payload = {
             "fullName": "Governance Test User",
             "email": email,
@@ -246,7 +246,7 @@ class RegistrationGovernanceApiTestCase(unittest.TestCase):
         ):
             with self.subTest(payload=payload):
                 email2, r = self._register(
-                    email=f"esc_{uuid.uuid4().hex[:8]}@govrisk.gov.in",
+                    email=f"esc_{uuid.uuid4().hex[:8]}@sankalp.gov.in",
                     **payload,
                 )
                 self.assertEqual(r.status_code, 201, r.text)
@@ -256,7 +256,7 @@ class RegistrationGovernanceApiTestCase(unittest.TestCase):
 
     def test_client_supplied_role_cannot_escalate(self):
         email, data = self._register_pending(
-            email=f"esc2_{uuid.uuid4().hex[:8]}@govrisk.gov.in",
+            email=f"esc2_{uuid.uuid4().hex[:8]}@sankalp.gov.in",
             role="admin",
             isApproved=True,
         )
@@ -341,7 +341,7 @@ class RegistrationGovernanceApiTestCase(unittest.TestCase):
         self.assertEqual(r.status_code, 403, r.text)
 
     def test_duplicate_email_registration_is_not_an_enumeration_oracle(self):
-        email = f"dup_{uuid.uuid4().hex[:8]}@govrisk.gov.in"
+        email = f"dup_{uuid.uuid4().hex[:8]}@sankalp.gov.in"
         self._register_pending(email=email)
         _, second = self._register(email=email)
         self.assertEqual(second.status_code, 201, second.text)
@@ -537,7 +537,7 @@ class RegistrationGovernanceApiTestCase(unittest.TestCase):
         engine = create_engine("sqlite://")
         AuthBase.metadata.create_all(bind=engine)
         make = sessionmaker(bind=engine)
-        email = f"legacy_{uuid.uuid4().hex[:8]}@govrisk.gov.in"
+        email = f"legacy_{uuid.uuid4().hex[:8]}@sankalp.gov.in"
         with make() as s:
             u = User(
                 id=uuid.uuid4().hex,

@@ -86,7 +86,7 @@ export default function Login() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-base font-bold tracking-wide text-navy-900 sm:text-lg font-heading">
-                GovRisk
+                Sankalp
               </span>
               <span className="hidden text-xs text-gray-400 sm:inline">|</span>
               <span className="text-sm font-medium text-gray-600">{t('login.governmentLine')}</span>
@@ -154,7 +154,7 @@ export default function Login() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@govrisk.gov.in"
+                  placeholder="you@sankalp.gov.in"
                   className="h-11 w-full rounded-md border border-gray-300 bg-white px-3.5 text-sm text-navy-900 outline-none transition-colors placeholder:text-gray-400 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20"
                 />
               </div>
@@ -238,10 +238,10 @@ export default function Login() {
               {t('login.demoCredentials')}
             </p>
             <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 font-mono text-xs text-gray-600 sm:grid-cols-2">
-              <span>admin@govrisk.gov.in / admin123</span>
-              <span>officer@govrisk.gov.in / officer123</span>
-              <span>analyst@govrisk.gov.in / analyst123</span>
-              <span>viewer@govrisk.gov.in / viewer123</span>
+              <span>admin@sankalp.gov.in / admin123</span>
+              <span>officer@sankalp.gov.in / officer123</span>
+              <span>analyst@sankalp.gov.in / analyst123</span>
+              <span>viewer@sankalp.gov.in / viewer123</span>
             </div>
           </div>
         </div>
@@ -264,7 +264,9 @@ export default function Login() {
               Terms
             </a>
           </nav>
-          <p className="text-center">© {new Date().getFullYear()} Government of India · GovRisk</p>
+          <p className="text-center">
+            © {new Date().getFullYear()} Government of India · GovRisk
+          </p>
         </div>
       </footer>
     </div>

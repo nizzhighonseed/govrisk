@@ -7,7 +7,7 @@ Covers:
 - LLM integration: valid JSON, malformed JSON -> deterministic fallback,
   provider unavailable -> neutral, never raises
 - AI API routes via TestClient against an ISOLATED temp database
-  (the dev govrisk.db/auth.db are never touched)
+  (the dev sankalp.db/auth.db are never touched)
 """
 
 import json
@@ -54,7 +54,7 @@ class PredictorTestCase(unittest.TestCase):
         p = make_project()
         result = predict(p, updates=[], alerts=[])
         self.assertEqual(result.prediction_method, "rule_statistical_fallback")
-        self.assertEqual(result.model_version, "govrisk-ai-v1")
+        self.assertEqual(result.model_version, "sankalp-ai-v1")
         self.assertEqual(result.risk_horizon_days, 90)
         self.assertLess(result.schedule_delay_probability, 0.5)
         self.assertLess(result.cost_overrun_probability, 0.5)
@@ -253,7 +253,7 @@ class LlmServiceTestCase(unittest.TestCase):
 
 def _patch_temp_dbs():
     """Point main + router DB sessions at throwaway SQLite files so the
-    API tests never write to the developer's govrisk.db / auth.db."""
+    API tests never write to the developer's sankalp.db / auth.db."""
     global _TMP_ENGINE, _TMP_AUTH_ENGINE
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -267,7 +267,7 @@ def _patch_temp_dbs():
     import models  # noqa: F401
     import auth.models  # noqa: F401
 
-    tmpdir = tempfile.mkdtemp(prefix="govrisk-test-")
+    tmpdir = tempfile.mkdtemp(prefix="sankalp-test-")
     _TMP_ENGINE = create_engine(
         "sqlite:///" + os.path.join(tmpdir, "test.db"),
         connect_args={"check_same_thread": False},
@@ -308,7 +308,7 @@ class AiApiTestCase(unittest.TestCase):
 
     def _officer_headers(self):
         suffix = uuid.uuid4().hex[:8]
-        email = f"ai_test_officer_{suffix}@govrisk.gov.in"
+        email = f"ai_test_officer_{suffix}@sankalp.gov.in"
         r = self.client.post(
             "/api/auth/register",
             json={

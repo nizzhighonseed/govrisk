@@ -2,16 +2,16 @@
 
 Clean abstraction around the trained PARIKSHAN .joblib artifacts:
 
-    GovRisk Project  →  feature adapter  →  37-feature row  →  trained
+    Sankalp Project  →  feature adapter  →  37-feature row  →  trained
     models  →  ML prediction result
 
 Principles:
 - Models are loaded ONCE at startup (see `MLModelRegistry.load`), never per
   request, never retrained.
 - The ML result is an ADDITIONAL predictive signal. It never modifies the
-  deterministic GovRisk risk fields (risk_score, risk_level, ...) computed by
+  deterministic Sankalp risk fields (risk_score, risk_level, ...) computed by
   `services.risk_service`.
-- Leakage is prevented: GovRisk future/outcome fields (predicted_completion,
+- Leakage is prevented: Sankalp future/outcome fields (predicted_completion,
   risk_score, delay_probability, ...) are forbidden as model inputs.
 - French/the models were trained on SYNTHETIC PAIMANA-style data, so results
   are forecasts, not validated real-world accuracy.
@@ -118,7 +118,7 @@ FUNDING_MODES: tuple[str, ...] = ("Budgetary", "IEBR", "EAP", "PPP")
 AGENCY_TYPES: tuple[str, ...] = ("CPSU", "Department", "JV", "SPV")
 COST_BANDS: tuple[str, ...] = ("150-500", "500-1000", "1000-5000", ">5000")
 
-# Out-of-vocabulary sentinel used for categorical features GovRisk does not
+# Out-of-vocabulary sentinel used for categorical features Sankalp does not
 # capture. OneHotEncoder(handle_unknown="ignore") yields an all-zero (neutral)
 # one-hot for this value — it never creates a false category.
 UNKNOWN_CATEGORY: str = "__UNKNOWN__"
@@ -141,10 +141,10 @@ EW_LATE_PHYSICAL_PROGRESS_THRESHOLD_PCT: float = 60.0
 EW_MANY_REASONS_THRESHOLD: int = 3
 EW_RISK_SCORE_RED_THRESHOLD: int = 70
 
-# GovRisk deterministic fields that are FUTURE/OUTCOME information and must
+# Sankalp deterministic fields that are FUTURE/OUTCOME information and must
 # never feed the model (leakage guard). The live model may only receive
 # information available at prediction time.
-GOVRISK_LEAKAGE_FIELDS: frozenset[str] = frozenset(
+SANKALP_LEAKAGE_FIELDS: frozenset[str] = frozenset(
     {
         "predicted_completion",
         "cost_overrun_probability",
@@ -167,7 +167,7 @@ GOVRISK_LEAKAGE_FIELDS: frozenset[str] = frozenset(
     }
 )
 
-# Assumed GovRisk risk_inputs -> PARIKSHAN reason-feature mappings.
+# Assumed Sankalp risk_inputs -> PARIKSHAN reason-feature mappings.
 # Centralised so the assumptions are configurable in one place. Each value is
 # a callable(row) -> bool. These are DERIVATIONS, flagged ASSUMED in docs.
 def _as_number(value):
@@ -234,7 +234,7 @@ _REASON_RESOLVERS: dict[str, object] = {
     "reason_forest_env_clearance": _reason_forest_env_clearance,
     "reason_funds_constraint": "derived",
     "reason_contractor_issues": _reason_contractor_issues,
-    "reason_tendering_delay": None,          # unsupported — no GovRisk source
+    "reason_tendering_delay": None,          # unsupported — no Sankalp source
     "reason_litigation": _reason_litigation,
     "reason_r_and_r": _reason_r_and_r,
     "reason_law_and_order": _reason_law_and_order,
@@ -279,12 +279,12 @@ def _artifacts_fingerprint(artifacts_dir: Path) -> str:
 # --------------------------------------------------------------------------
 # Leakage guard
 # --------------------------------------------------------------------------
-def assert_no_govrisk_leakage(feature_row: dict) -> None:
-    """Raise if any forbidden GovRisk future/outcome field entered the row."""
-    leaked = [k for k in feature_row if k in GOVRISK_LEAKAGE_FIELDS]
+def assert_no_sankalp_leakage(feature_row: dict) -> None:
+    """Raise if any forbidden Sankalp future/outcome field entered the row."""
+    leaked = [k for k in feature_row if k in SANKALP_LEAKAGE_FIELDS]
     if leaked:
         raise ValueError(
-            "Leakage detected: GovRisk future/outcome fields must never feed "
+            "Leakage detected: Sankalp future/outcome fields must never feed "
             f"the PARIKSHAN model: {sorted(leaked)}"
         )
 
@@ -354,7 +354,7 @@ def _clamp_prob(v: float) -> float:
 
 
 # --------------------------------------------------------------------------
-# Feature adapter (GovRisk Project -> 37-feature row)
+# Feature adapter (Sankalp Project -> 37-feature row)
 # --------------------------------------------------------------------------
 def _parse_date(value):
     if isinstance(value, (datetime, date)):
@@ -398,8 +398,8 @@ def _safe_vocab(value, vocab: tuple[str, ...]) -> str:
 
 
 def build_feature_row(project) -> pd.DataFrame:
-    """Build the exact 1-row x 37-column feature DataFrame for a GovRisk
-    Project ORM object. Only as-of-now information is used; GovRisk
+    """Build the exact 1-row x 37-column feature DataFrame for a Sankalp
+    Project ORM object. Only as-of-now information is used; Sankalp
     deterministic/future output columns are excluded by construction."""
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -431,7 +431,7 @@ def build_feature_row(project) -> pd.DataFrame:
     # early-warning signal), NOT planned-vs-physical.
     gap_pp = (fin - physical) if fin is not None else 0.0
 
-    # Velocity features. Without quarterly history GovRisk cannot reproduce
+    # Velocity features. Without quarterly history Sankalp cannot reproduce
     # a trailing 3-quarter velocity; required_velocity is derived from the
     # remaining plan and velocity_ratio is left missing (the serialized
     # pipeline median-imputes it, exactly as in training).
@@ -440,7 +440,7 @@ def build_feature_row(project) -> pd.DataFrame:
     required_velocity = remaining_frac / remaining_quarters if remaining_frac > 0 else 0.01
     velocity_ratio = float("nan")  # history unavailable -> median imputed
 
-    # risk_inputs structured JSON (GovRisk's only qualitative evidence).
+    # risk_inputs structured JSON (Sankalp's only qualitative evidence).
     raw_inputs = getattr(project, "risk_inputs", None)
     try:
         branch = json.loads(raw_inputs) if raw_inputs else {}
@@ -484,7 +484,7 @@ def build_feature_row(project) -> pd.DataFrame:
 
     row["sector"] = _safe_vocab(getattr(project, "sector", None), SECTORS)
     row["state"] = _safe_vocab(getattr(project, "state", None), STATES)
-    row["funding_mode"] = UNKNOWN_CATEGORY          # not captured by GovRisk
+    row["funding_mode"] = UNKNOWN_CATEGORY          # not captured by Sankalp
     row["implementing_agency_type"] = UNKNOWN_CATEGORY
     row["cost_band"] = cost_band_for_cost(original_cost)
     row["is_multi_state"] = 0
@@ -494,7 +494,7 @@ def build_feature_row(project) -> pd.DataFrame:
     row["agency_prior_avg_time_overrun_months"] = float("nan")
     row["agency_prior_severe_rate"] = float("nan")
 
-    assert_no_govrisk_leakage(row)
+    assert_no_sankalp_leakage(row)
 
     df = pd.DataFrame([row])
     missing = [c for c in ALL_FEATURES if c not in df.columns]
@@ -844,7 +844,7 @@ def ml_prediction_for_project(project) -> Optional[dict]:
 __all__ = [
     "ALL_FEATURES",
     "build_feature_row",
-    "assert_no_govrisk_leakage",
+    "assert_no_sankalp_leakage",
     "MLModelRegistry",
     "MLPredictionService",
     "MLPredictionResult",

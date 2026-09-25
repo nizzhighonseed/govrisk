@@ -1,5 +1,5 @@
 """
-GovRisk Demo Seed Script
+Sankalp Demo Seed Script
 ========================
 Creates the SQLite database and populates it with demonstration data.
 
@@ -21,11 +21,11 @@ from services.risk_service import apply_assessment
 
 
 def seed():
-    print("GovRisk Seed Script")
+    print("Sankalp Seed Script")
     print("=" * 40)
 
     # Remove existing database
-    db_path = os.path.join(os.path.dirname(__file__), "govrisk.db")
+    db_path = os.path.join(os.path.dirname(__file__), "sankalp.db")
     if os.path.exists(db_path):
         os.remove(db_path)
         print(f"Removed existing database: {db_path}")

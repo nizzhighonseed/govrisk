@@ -67,7 +67,7 @@ export function AIChat({
         {messages.length === 0 ? (
           <div>
             <h3 className="text-sm font-medium text-navy-900">
-              Ask GovRisk AI...
+              Ask Sankalp AI...
             </h3>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {suggestedQuestions.map((question) => (
@@ -122,7 +122,7 @@ export function AIChat({
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask GovRisk AI..."
+            placeholder="Ask Sankalp AI..."
             className="flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <button

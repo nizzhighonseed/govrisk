@@ -36,7 +36,7 @@ def _patch_temp_dbs() -> None:
     import auth.models  # noqa: F401 - register tables on AuthBase.metadata
     import ai.ai_service
 
-    tmpdir = tempfile.mkdtemp(prefix="govrisk-ml-test-")
+    tmpdir = tempfile.mkdtemp(prefix="sankalp-ml-test-")
     engine = create_engine(
         "sqlite:///" + os.path.join(tmpdir, "test.db"),
         connect_args={"check_same_thread": False},
@@ -71,7 +71,7 @@ class MlApiTestCase(unittest.TestCase):
 
     def _auth_headers(self, role="officer"):
         suffix = uuid.uuid4().hex[:8]
-        email = f"ml_test_{role}_{suffix}@govrisk.gov.in"
+        email = f"ml_test_{role}_{suffix}@sankalp.gov.in"
         r = self.client.post(
             "/api/auth/register",
             json={
@@ -247,7 +247,7 @@ class MlUnavailableTestCase(unittest.TestCase):
 
     def _officer_headers(self):
         suffix = uuid.uuid4().hex[:8]
-        email = f"ml_unavail_{suffix}@govrisk.gov.in"
+        email = f"ml_unavail_{suffix}@sankalp.gov.in"
         r = self.client.post(
             "/api/auth/register",
             json={

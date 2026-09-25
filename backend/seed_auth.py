@@ -10,7 +10,7 @@ from auth.audit import next_user_id
 DEMO_USERS = [
     {
         "full_name": "Admin User",
-        "email": "admin@govrisk.gov.in",
+        "email": "admin@sankalp.gov.in",
         "password": "admin123",
         "role": "admin",
         "department": "Digital India Corporation",
@@ -18,7 +18,7 @@ DEMO_USERS = [
     },
     {
         "full_name": "Rajesh Kumar",
-        "email": "officer@govrisk.gov.in",
+        "email": "officer@sankalp.gov.in",
         "password": "officer123",
         "role": "officer",
         "department": "Ministry of Road Transport",
@@ -26,7 +26,7 @@ DEMO_USERS = [
     },
     {
         "full_name": "Priya Sharma",
-        "email": "analyst@govrisk.gov.in",
+        "email": "analyst@sankalp.gov.in",
         "password": "analyst123",
         "role": "analyst",
         "department": "NITI Aayog",
@@ -34,7 +34,7 @@ DEMO_USERS = [
     },
     {
         "full_name": "Amit Verma",
-        "email": "viewer@govrisk.gov.in",
+        "email": "viewer@sankalp.gov.in",
         "password": "viewer123",
         "role": "viewer",
         "department": "Ministry of Finance",
@@ -43,10 +43,10 @@ DEMO_USERS = [
 ]
 
 EXPECTED_USER_IDS = {
-    "admin@govrisk.gov.in": "USR-0001",
-    "officer@govrisk.gov.in": "USR-0002",
-    "analyst@govrisk.gov.in": "USR-0003",
-    "viewer@govrisk.gov.in": "USR-0004",
+    "admin@sankalp.gov.in": "USR-0001",
+    "officer@sankalp.gov.in": "USR-0002",
+    "analyst@sankalp.gov.in": "USR-0003",
+    "viewer@sankalp.gov.in": "USR-0004",
 }
 
 

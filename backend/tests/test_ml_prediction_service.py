@@ -2,8 +2,8 @@
 
 Covers (PDF-compliant requirements):
 - 37-feature contract + exact column names
-- GovRisk -> feature mapping semantics (elapsed, gap, velocity, bands, reasons)
-- leakage prevention: GovRisk future/outcome fields never enter the model
+- Sankalp -> feature mapping semantics (elapsed, gap, velocity, bands, reasons)
+- leakage prevention: Sankalp future/outcome fields never enter the model
 - model registry loading + version fingerprint
 - prediction output shape, bounds, quantile ordering
 - risk score formula + Green/Amber/Red bands
@@ -91,7 +91,7 @@ class FeatureRowTestCase(unittest.TestCase):
 class LeakageTestCase(unittest.TestCase):
     def test_guard_rejects_forbidden_fields(self):
         with self.assertRaises(ValueError):
-            mls.assert_no_govrisk_leakage({
+            mls.assert_no_sankalp_leakage({
                 "physical_progress_pct": 90,
                 "risk_score": 72,
                 "predicted_completion": "2027-01-01",
@@ -108,9 +108,9 @@ class LeakageTestCase(unittest.TestCase):
         )
         df = mls.build_feature_row(p)
         for col in df.columns:
-            self.assertNotIn(col, mls.GOVRISK_LEAKAGE_FIELDS)
+            self.assertNotIn(col, mls.SANKALP_LEAKAGE_FIELDS)
         # belt-and-braces: the guard itself must pass on the built row
-        mls.assert_no_govrisk_leakage(df.to_dict("records")[0])
+        mls.assert_no_sankalp_leakage(df.to_dict("records")[0])
 
 
 class ReasonDerivationTestCase(unittest.TestCase):

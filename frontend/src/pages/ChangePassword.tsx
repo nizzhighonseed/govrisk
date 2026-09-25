@@ -71,7 +71,7 @@ export default function ChangePassword() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-base font-bold tracking-wide text-navy-900 sm:text-lg font-heading">
-                GovRisk
+                Sankalp
               </span>
               <span className="hidden text-xs text-gray-400 sm:inline">|</span>
               <span className="text-sm font-medium text-gray-600">Account Security</span>

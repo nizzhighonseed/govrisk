@@ -119,27 +119,15 @@ export default function Topbar({ onToggleSidebar }: TopbarProps) {
   return (
     <header className="sticky top-0 z-20 grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-gray-200 bg-white/95 px-5 sm:gap-4 sm:px-6 lg:h-[72px] lg:gap-5 lg:px-8">
       {/* Left: Emblem + branding */}
-      <div className="flex min-w-0 items-center justify-self-start gap-3">
-        {onToggleSidebar && (
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden"
-            aria-label="Toggle navigation"
-          >
-            <Menu size={20} />
-          </button>
-        )}
-        <div className="hidden shrink-0 items-center gap-3 sm:flex">
-          <img
-            src="/emblem_of_india.svg"
-            alt="Indian National Emblem"
-            className="h-10 w-auto shrink-0"
-          />
-          <div className="min-w-0 border-l border-gray-200 pl-3">
-            <p className="text-sm font-bold tracking-wide text-navy-900 font-heading">GovRisk</p>
-            <p className="text-[11px] text-gray-500">{t('topbar.tagline')}</p>
-          </div>
+      <div className="hidden shrink-0 items-center gap-3 sm:flex">
+        <img
+          src="/emblem_of_india.svg"
+          alt="Indian National Emblem"
+          className="h-10 w-auto shrink-0"
+        />
+        <div className="min-w-0 border-l border-gray-200 pl-3">
+          <p className="text-sm font-bold tracking-wide text-navy-900 font-heading">GovRisk</p>
+          <p className="text-[11px] text-gray-500">Government of India</p>
         </div>
       </div>
 

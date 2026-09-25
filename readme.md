@@ -1,4 +1,4 @@
-# GovRisk — AI-Powered Infrastructure Risk Intelligence Platform
+# Sankalp — AI-Powered Infrastructure Risk Intelligence Platform
 
 A web application for monitoring government infrastructure projects, identifying risk early, and empowering officials with AI-driven insights. Built for the Smart India Hackathon 2026.
 
@@ -14,7 +14,7 @@ FastAPI Backend
       +----------------------+
       |                      |
       v                      v
-   auth.db                govrisk.db
+   auth.db                sankalp.db
       |                      |
     users                projects
                          alerts
@@ -23,7 +23,7 @@ FastAPI Backend
 ### Why two databases?
 
 - **`auth.db`** — Authentication data (users, password hashes, roles). Kept separate so security-critical data is isolated from project data and can be backed up, migrated, or replaced independently.
-- **`govrisk.db`** — Domain data (projects and alerts) that powers the risk monitoring product.
+- **`sankalp.db`** — Domain data (projects and alerts) that powers the risk monitoring product.
 
 ## Tech Stack
 
@@ -31,7 +31,7 @@ FastAPI Backend
 |---|---|
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, React Router, Leaflet |
 | Backend | FastAPI, SQLAlchemy 2 |
-| Databases | SQLite (`auth.db` + `govrisk.db`) |
+| Databases | SQLite (`auth.db` + `sankalp.db`) |
 | Auth | JWT (access + refresh tokens), bcrypt password hashing |
 
 ## Roles
@@ -47,10 +47,10 @@ FastAPI Backend
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@govrisk.gov.in` | `admin123` |
-| Officer | `officer@govrisk.gov.in` | `officer123` |
-| Analyst | `analyst@govrisk.gov.in` | `analyst123` |
-| Viewer | `viewer@govrisk.gov.in` | `viewer123` |
+| Admin | `admin@sankalp.gov.in` | `admin123` |
+| Officer | `officer@sankalp.gov.in` | `officer123` |
+| Analyst | `analyst@sankalp.gov.in` | `analyst123` |
+| Viewer | `viewer@sankalp.gov.in` | `viewer123` |
 
 > These are DEMO credentials only. Never use default secrets in production.
 
@@ -62,7 +62,7 @@ cd backend
 # Install dependencies (uses Python 3.13)
 pip install -r requirements.txt
 
-# Seed the project database (govrisk.db)
+# Seed the project database (sankalp.db)
 python seed.py
 
 # Seed the authentication database (auth.db) — idempotent, safe to rerun
@@ -90,7 +90,7 @@ Backend reads configuration from `backend/.env` (see `backend/.env.example`):
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:///./govrisk.db` | Project monitoring database |
+| `DATABASE_URL` | `sqlite:///./sankalp.db` | Project monitoring database |
 | `AUTH_DATABASE_URL` | `sqlite:///./auth.db` | Authentication database |
 | `JWT_SECRET_KEY` | dev value | Secret used to sign JWT tokens — set a strong value in production |
 | `JWT_ALGORITHM` | `HS256` | JWT signing algorithm |
@@ -128,7 +128,7 @@ Frontend reads `frontend/.env`:
 | PATCH | `/api/users/{id}/role` | Change user role | Admin |
 | PATCH | `/api/users/{id}/status` | Activate/deactivate user | Admin |
 
-### Project Monitoring (`govrisk.db`)
+### Project Monitoring (`sankalp.db`)
 
 All endpoints below require a valid JWT (returns `401` otherwise).
 
@@ -200,13 +200,13 @@ backend/
 │   ├── schemas.py
 │   └── prompts.py
 ├── services/risk_service.py
-├── database.py            # govrisk.db engine + session
+├── database.py            # sankalp.db engine + session
 ├── models.py              # Project/Alert/Update + AI models
 ├── schemas.py
-├── seed.py                # seeds govrisk.db
+├── seed.py                # seeds sankalp.db
 ├── seed_auth.py           # seeds auth.db (idempotent)
 ├── main.py                # FastAPI app + CORS + routers
-├── govrisk.db
+├── sankalp.db
 ├── auth.db
 └── .env / .env.example
 
@@ -244,7 +244,7 @@ This is an SIH MVP. Before production, consider:
 
 ## AI Early-Warning Layer
 
-GovRisk combines a **deterministic rule engine** (unchanged - the single
+Sankalp combines a **deterministic rule engine** (unchanged - the single
 source of truth for risk scores) with a **hybrid AI layer** that delivers
 95-day early warnings without ever fabricating numbers.
 
@@ -271,7 +271,7 @@ project updates + alerts + risk inputs
 - **No fake AI.** No ML model is claimed: the predictor is a transparent
   statistical model (`prediction_method` = `rule_statistical_fallback` when
   there is no update history, `hybrid` once >= 3 updates exist). `model_version`
-  is `govrisk-ai-v1`.
+  is `sankalp-ai-v1`.
 - **LLM is optional and never trusted for numbers.** A provider is read from
   `AI_PROVIDER`/`AI_API_KEY` (OpenAI-compatible or Anthropic). It only
   classifies updates and enriches explanations; output must validate against a

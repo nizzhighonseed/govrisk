@@ -158,7 +158,7 @@ class AssistantReplyPlainTextTestCase(unittest.TestCase):
 
 def _patch_temp_dbs():
     """Point main + router DB sessions at throwaway SQLite files so the
-    API tests never write to the developer's govrisk.db / auth.db."""
+    API tests never write to the developer's sankalp.db / auth.db."""
     global _TMP_ENGINE, _TMP_AUTH_ENGINE
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -169,7 +169,7 @@ def _patch_temp_dbs():
     import models  # noqa: F401
     import auth.models  # noqa: F401
 
-    tmpdir = tempfile.mkdtemp(prefix="govrisk-xss-test-")
+    tmpdir = tempfile.mkdtemp(prefix="sankalp-xss-test-")
     _TMP_ENGINE = create_engine(
         "sqlite:///" + os.path.join(tmpdir, "test.db"),
         connect_args={"check_same_thread": False},
@@ -216,7 +216,7 @@ class AssistantApiXssTestCase(unittest.TestCase):
 
     def _officer_headers(self):
         suffix = uuid.uuid4().hex[:8]
-        email = f"xss_officer_{suffix}@govrisk.gov.in"
+        email = f"xss_officer_{suffix}@sankalp.gov.in"
         r = self.client.post(
             "/api/auth/register",
             json={

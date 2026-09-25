@@ -24,11 +24,11 @@ if load_dotenv is not None:
 APP_ENV = os.getenv("APP_ENV", "development")
 
 # Database locations
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./govrisk.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./sankalp.db")
 AUTH_DATABASE_URL = os.getenv("AUTH_DATABASE_URL", "sqlite:///./auth.db")
 
 # JWT
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "govrisk-dev-secret-key-change-in-production")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "sankalp-dev-secret-key-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
@@ -66,7 +66,7 @@ def validate_config() -> None:
     they are never acceptable for production.
     """
     missing = []
-    if not JWT_SECRET_KEY or "change-this" in JWT_SECRET_KEY or JWT_SECRET_KEY.startswith("govrisk-dev"):
+    if not JWT_SECRET_KEY or "change-this" in JWT_SECRET_KEY or JWT_SECRET_KEY.startswith("sankalp-dev"):
         missing.append("JWT_SECRET_KEY (set a strong, unique value)")
     auth_limits = {
         "AUTH_MAX_FAILED_ATTEMPTS": AUTH_MAX_FAILED_ATTEMPTS,
@@ -100,12 +100,12 @@ def setup_logging(level: str = "INFO") -> None:
     root.handlers = [h for h in root.handlers if not isinstance(h, logging.StreamHandler)]
     root.addHandler(handler)
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
-    logging.getLogger("govrisk.ai").setLevel(logging.DEBUG)
+    logging.getLogger("sankalp.ai").setLevel(logging.DEBUG)
     logging.getLogger("uvicorn").setLevel(logging.INFO)
 
 
 def get_logger(name: str) -> logging.Logger:
-    return logging.getLogger(f"govrisk.ai.{name}")
+    return logging.getLogger(f"sankalp.ai.{name}")
 
 
 ai_logger = get_logger("service")

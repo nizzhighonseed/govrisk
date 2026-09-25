@@ -1,4 +1,4 @@
-# ML dependencies for the PARIKSHAN model integration (GovRisk backend)
+# ML dependencies for the PARIKSHAN model integration (Sankalp backend)
 #
 # Install alongside the app stack:
 #     pip install -r requirements.txt -r requirements-ml.txt

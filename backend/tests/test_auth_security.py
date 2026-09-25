@@ -10,7 +10,7 @@ Covers:
 - concurrent failures cannot bypass the account threshold
 
 All HTTP tests run against isolated temp databases (same pattern as
-test_ai_analysis / test_assistant_xss); the developer's govrisk.db and
+test_ai_analysis / test_assistant_xss); the developer's sankalp.db and
 auth.db are never written. The in-process rate limiter is reset before every
 test so the suite cannot leak throttle state between tests, and no external
 Redis/server is required.
@@ -58,7 +58,7 @@ def _patch_temp_dbs():
     import models  # noqa: F401 - register metadata on Base
     import auth.models  # noqa: F401 - register metadata on AuthBase
 
-    tmpdir = tempfile.mkdtemp(prefix="govrisk-authsec-")
+    tmpdir = tempfile.mkdtemp(prefix="sankalp-authsec-")
     _TMP_ENGINE = create_engine(
         "sqlite:///" + os.path.join(tmpdir, "test.db"),
         connect_args={"check_same_thread": False},
@@ -96,7 +96,7 @@ class AuthSecurityApiTestCase(unittest.TestCase):
     # helpers
     # ------------------------------------------------------------------ #
     def _register(self, email=None, password="testpass123", expect=201):
-        email = email or f"auth_{uuid.uuid4().hex[:10]}@govrisk.gov.in"
+        email = email or f"auth_{uuid.uuid4().hex[:10]}@sankalp.gov.in"
         r = self.client.post(
             "/api/auth/register",
             json={
@@ -246,7 +246,7 @@ class AuthSecurityApiTestCase(unittest.TestCase):
     # login: no account enumeration
     # ------------------------------------------------------------------ #
     def test_invalid_username_identical_to_wrong_password(self):
-        ghost = f"ghost_{uuid.uuid4().hex[:8]}@govrisk.gov.in"
+        ghost = f"ghost_{uuid.uuid4().hex[:8]}@sankalp.gov.in"
         unknown = self._login(ghost, "some-password")
         self.assertEqual(unknown.status_code, 401)
         email, _ = self._register()
@@ -282,7 +282,7 @@ class AuthSecurityApiTestCase(unittest.TestCase):
             "/api/auth/register",
             json={
                 "fullName": "Throttled",
-                "email": f"t{uuid.uuid4().hex[:8]}@govrisk.gov.in",
+                "email": f"t{uuid.uuid4().hex[:8]}@sankalp.gov.in",
                 "password": "testpass123",
             },
         )
@@ -374,7 +374,7 @@ class AuthSecurityApiTestCase(unittest.TestCase):
         )
         AuthBase.metadata.create_all(bind=_engine)
         make = sessionmaker(bind=_engine, autocommit=False, autoflush=False)
-        email = f"conc_{uuid.uuid4().hex[:8]}@govrisk.gov.in"
+        email = f"conc_{uuid.uuid4().hex[:8]}@sankalp.gov.in"
         with make() as s:
             u = User(
                 id=uuid.uuid4().hex,
@@ -449,7 +449,7 @@ class LockoutUnitTestCase(unittest.TestCase):
         with make() as s:
             u = User(
                 id="u1", user_id="USR-U1", full_name="Unit",
-                email=f"unit{uuid.uuid4().hex[:8]}@govrisk.gov.in",
+                email=f"unit{uuid.uuid4().hex[:8]}@sankalp.gov.in",
                 password_hash="x", role="viewer", is_active=True,
             )
             s.add(u)
@@ -469,7 +469,7 @@ class LockoutUnitTestCase(unittest.TestCase):
             # lockout duration (no permanent lockout from old streaks)
             u2 = User(
                 id="u2", user_id="USR-U2", full_name="Unit",
-                email=f"unit2{uuid.uuid4().hex[:8]}@govrisk.gov.in",
+                email=f"unit2{uuid.uuid4().hex[:8]}@sankalp.gov.in",
                 password_hash="x", role="viewer", is_active=True,
                 failed_login_count=4,
                 last_failed_login=now - timedelta(minutes=60),

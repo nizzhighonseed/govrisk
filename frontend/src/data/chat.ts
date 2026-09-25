@@ -76,23 +76,23 @@ export const mockResponses: Record<string, string> = {
     '   - Forest clearance, forest diversion, and pollution control board approvals\n\n' +
     '**Key Insight:** Land acquisition remains the single largest systemic risk. Projects with proactive land acquisition planning show 47% lower delay probability.',
 
-  'portfolio overview':
-    'Here is a snapshot of the **GovRisk monitored portfolio** as of September 2025:\n\n' +
-    '- **Total Projects Monitored:** 313\n' +
-    '- **Total Sanctioned Cost:** ₹8.7 lakh Cr\n' +
-    '- **Total Expenditure to Date:** ₹4.1 lakh Cr (47.1%)\n\n' +
-    '**Risk Distribution:**\n' +
-    '- Critical: 52 projects (16.6%)\n' +
-    '- High: 91 projects (29.1%)\n' +
-    '- Medium: 118 projects (37.7%)\n' +
-    '- Low: 52 projects (16.6%)\n\n' +
-    '**Performance Metrics:**\n' +
-    '- Average Physical Progress: 54.3%\n' +
-    '- Average Planned Progress: 68.1%\n' +
-    '- Schedule Variance: -13.8 percentage points\n' +
-    '- Average Cost Overrun: 11.2%\n' +
-    '- Projects Delayed (>70% probability): 38\n\n' +
-    '**Trend:** Risk levels have increased by 4.2% over the last quarter, primarily driven by the Water and Transport sectors.',
+  "portfolio overview":
+    "Here is a snapshot of the **GovRisk monitored portfolio** as of September 2025:\n\n" +
+    "- **Total Projects Monitored:** 313\n" +
+    "- **Total Sanctioned Cost:** ₹8.7 lakh Cr\n" +
+    "- **Total Expenditure to Date:** ₹4.1 lakh Cr (47.1%)\n\n" +
+    "**Risk Distribution:**\n" +
+    "- Critical: 52 projects (16.6%)\n" +
+    "- High: 91 projects (29.1%)\n" +
+    "- Medium: 118 projects (37.7%)\n" +
+    "- Low: 52 projects (16.6%)\n\n" +
+    "**Performance Metrics:**\n" +
+    "- Average Physical Progress: 54.3%\n" +
+    "- Average Planned Progress: 68.1%\n" +
+    "- Schedule Variance: -13.8 percentage points\n" +
+    "- Average Cost Overrun: 11.2%\n" +
+    "- Projects Delayed (>70% probability): 38\n\n" +
+    "**Trend:** Risk levels have increased by 4.2% over the last quarter, primarily driven by the Water and Transport sectors.",
 
   'sector comparison':
     'Here is a comparative analysis of risk across sectors:\n\n' +
@@ -128,35 +128,35 @@ export const mockResponses: Record<string, string> = {
     '- Ministry of Communications maintains the best risk profile with only 2 high-risk projects across 15 monitored initiatives.\n\n' +
     '**Action Required:** The monitoring committee should schedule dedicated reviews for Jal Shakti and Road Transport ministries this quarter.',
 
-  hello:
+  "hello":
     "Hello! I'm the **GovRisk AI Assistant**, here to help you analyze government infrastructure project risks.\n\n" +
-    'I can assist you with:\n' +
-    '- **Portfolio Risk Analysis** — View overall risk distribution and trends\n' +
-    '- **Project Deep Dives** — Drill into specific project risk factors\n' +
-    '- **Sector Comparisons** — Compare risk metrics across sectors\n' +
-    '- **Ministry Performance** — Review ministry-wise project outcomes\n' +
-    '- **Predictive Insights** — Get AI-powered delay and cost overrun predictions\n' +
-    '- **Recommendations** — Receive actionable mitigation strategies\n\n' +
-    'Try asking me about high-risk projects, cost overruns, or sector performance to get started.',
+    "I can assist you with:\n" +
+    "- **Portfolio Risk Analysis** — View overall risk distribution and trends\n" +
+    "- **Project Deep Dives** — Drill into specific project risk factors\n" +
+    "- **Sector Comparisons** — Compare risk metrics across sectors\n" +
+    "- **Ministry Performance** — Review ministry-wise project outcomes\n" +
+    "- **Predictive Insights** — Get AI-powered delay and cost overrun predictions\n" +
+    "- **Recommendations** — Receive actionable mitigation strategies\n\n" +
+    "Try asking me about high-risk projects, cost overruns, or sector performance to get started.",
 
-  help:
+  "help":
     "Here's how I can help you navigate the GovRisk platform:\n\n" +
-    '**Project Analysis:**\n' +
-    '- "Which projects are at highest risk?"\n' +
-    '- "Show me projects likely to be delayed."\n' +
-    '- "Why is [project name] high risk?"\n\n' +
-    '**Sector & Ministry Insights:**\n' +
-    '- "Which sector has the highest average cost overrun?"\n' +
-    '- "Compare sector performance."\n' +
-    '- "How is [ministry name] performing?"\n\n' +
-    '**Risk Intelligence:**\n' +
-    '- "What are the major risk drivers?"\n' +
-    '- "Give me a portfolio overview."\n' +
-    '- "What\'s the cost prediction for [project name]?"\n\n' +
-    '**Tips:**\n' +
-    '- You can click on any suggested question below the chat for quick access.\n' +
-    '- Responses reference real-time data from the monitored portfolio of 313 projects.\n' +
-    '- For detailed project views, click on any project card in the dashboard.',
+    "**Project Analysis:**\n" +
+    "- \"Which projects are at highest risk?\"\n" +
+    "- \"Show me projects likely to be delayed.\"\n" +
+    "- \"Why is [project name] high risk?\"\n\n" +
+    "**Sector & Ministry Insights:**\n" +
+    "- \"Which sector has the highest average cost overrun?\"\n" +
+    "- \"Compare sector performance.\"\n" +
+    "- \"How is [ministry name] performing?\"\n\n" +
+    "**Risk Intelligence:**\n" +
+    "- \"What are the major risk drivers?\"\n" +
+    "- \"Give me a portfolio overview.\"\n" +
+    "- \"What's the cost prediction for [project name]?\"\n\n" +
+    "**Tips:**\n" +
+    "- You can click on any suggested question below the chat for quick access.\n" +
+    "- Responses reference real-time data from the monitored portfolio of 313 projects.\n" +
+    "- For detailed project views, click on any project card in the dashboard.",
 
   'cost prediction':
     'Based on our predictive cost model, here are the top projects at risk of significant cost overruns:\n\n' +

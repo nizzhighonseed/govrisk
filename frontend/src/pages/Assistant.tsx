@@ -74,12 +74,8 @@ export default function Assistant() {
             <Bot className="h-7 w-7 text-blue-600" />
           </span>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-navy-900 lg:text-3xl">
-              {t('assistant.title')}
-            </h1>
-            <p className="text-sm font-medium text-gray-600">
-              {t('assistant.subtitle')}
-            </p>
+            <h1 className="text-2xl font-bold tracking-tight text-navy-900 lg:text-3xl">GovRisk AI</h1>
+            <p className="text-sm font-medium text-gray-600">Infrastructure Intelligence Assistant</p>
           </div>
         </div>
         <p className="mt-2 text-sm text-gray-500">

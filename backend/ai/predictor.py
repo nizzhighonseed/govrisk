@@ -200,7 +200,7 @@ def predict(project, updates=None, alerts=None, previous_risk_score=None) -> Pre
         future_score=future,
         current_score=int(current),
         prediction_method=method,
-        model_version="govrisk-ai-v1",
+        model_version="sankalp-ai-v1",
         data_points_used=features["data_points"],
         generated_at=datetime.now(timezone.utc).isoformat(),
         top_drivers=driver_list,

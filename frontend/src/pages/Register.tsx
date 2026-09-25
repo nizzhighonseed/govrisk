@@ -59,10 +59,10 @@ export default function Register() {
         <div className="flex h-full flex-col justify-between bg-gradient-to-br from-navy-900 via-navy-900 to-navy-800 p-12">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-base font-bold text-white">
-              GR
+              S
             </div>
             <div>
-              <h1 className="text-xl font-bold uppercase tracking-wide text-white">GovRisk</h1>
+              <h1 className="text-xl font-bold uppercase tracking-wide text-white">Sankalp</h1>
               <p className="text-xs text-navy-300">AI Infrastructure Intelligence</p>
             </div>
           </div>
@@ -87,10 +87,10 @@ export default function Register() {
         <div className="w-full max-w-md">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-sm font-bold text-white">
-              GR
+              S
             </div>
             <div>
-              <h1 className="text-lg font-bold uppercase tracking-wide text-white">GovRisk</h1>
+              <h1 className="text-lg font-bold uppercase tracking-wide text-white">Sankalp</h1>
               <p className="text-xs text-navy-300">AI Infrastructure Intelligence</p>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function Register() {
           <div className="rounded-2xl border border-navy-800 bg-navy-900 p-8 shadow-2xl">
             <h2 className="text-2xl font-bold text-white">Create your account</h2>
             <p className="mt-1.5 text-sm text-navy-300">
-              Register to access the GovRisk monitoring platform
+              Register to access the Sankalp monitoring platform
             </p>
 
             {submittedEmail ? (
@@ -114,7 +114,7 @@ export default function Register() {
                     <p className="mt-1.5 text-sm leading-relaxed text-navy-200">
                       Your request for <span className="font-medium text-white">{submittedEmail}</span>{' '}
                       has been received. An administrator must approve your account before
-                      you can sign in to the GovRisk portfolio.
+                      you can sign in to the Sankalp portfolio.
                     </p>
                   </div>
                 </div>
@@ -162,7 +162,7 @@ export default function Register() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@govrisk.gov.in"
+                  placeholder="you@sankalp.gov.in"
                   className={inputClass}
                 />
               </div>

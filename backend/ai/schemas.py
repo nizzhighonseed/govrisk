@@ -13,7 +13,7 @@ PREDICTION_METHOD_PARIKSHAN_ML = "parikshan_ml"
 PREDICTION_METHOD_HYBRID = "hybrid"
 PREDICTION_METHOD_RULE = "rule_statistical_fallback"
 
-MODEL_VERSION = "govrisk-ai-v1"
+MODEL_VERSION = "sankalp-ai-v1"
 
 
 class MLForecast(BaseModel):

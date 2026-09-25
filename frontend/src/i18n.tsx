@@ -1427,7 +1427,7 @@ export function roleLabel(lang: Lang, role: string, full = false): string {
 
 const dictionaries: Record<Lang, Record<TranslationKey, string>> = { en, hi };
 
-const LANG_KEY = 'govrisk-lang';
+const LANG_KEY = 'sankalp-lang';
 
 interface I18nValue {
   lang: Lang;

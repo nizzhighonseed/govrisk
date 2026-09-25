@@ -186,8 +186,8 @@ export default function Projects() {
         <LoadingState text={t('projects.loading')} />
       ) : error ? (
         <EmptyState
-          title={t('projects.connectError')}
-          description={t('projects.connectErrorDesc')}
+          title="Unable to connect to GovRisk services"
+          description="Please check that the GovRisk backend is running and try again."
           icon={<FolderSearch size={40} />}
         />
       ) : (

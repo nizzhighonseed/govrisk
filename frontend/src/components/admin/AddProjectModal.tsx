@@ -129,9 +129,9 @@ function ModalShell({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] overflow-y-auto p-4">
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+      <div className="relative mx-auto my-8 w-full max-w-3xl rounded-2xl bg-white p-6 pb-12 shadow-2xl sm:my-12">
         <button
           onClick={onClose}
           className="absolute right-4 top-4 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"

@@ -1,4 +1,4 @@
-"""Idempotent schema migrations for the existing govrisk.db.
+"""Idempotent schema migrations for the existing sankalp.db.
 
 SQLAlchemy create_all() only creates missing tables and does not add
 new columns to existing tables. This module adds newly introduced
@@ -37,7 +37,7 @@ PROJECT_COLUMNS = {
 
 
 def _create_ai_tables(engine: Engine) -> None:
-    """Idempotently create the AI tables + indexes on govrisk.db.
+    """Idempotently create the AI tables + indexes on sankalp.db.
 
     Fresh databases get them via create_all() in main.py (they are part of
     Base). This is a safety net for databases that predate the AI feature.

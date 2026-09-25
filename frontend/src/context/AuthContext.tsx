@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('govrisk_access_token');
+    const token = localStorage.getItem('sankalp_access_token');
     if (!token) {
       setLoading(false);
       return;

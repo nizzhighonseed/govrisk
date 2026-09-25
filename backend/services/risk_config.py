@@ -1,4 +1,4 @@
-"""Central configuration for the GovRisk rule-based risk engine.
+"""Central configuration for the Sankalp rule-based risk engine.
 
 Everything an analyst or adjuster would want to tune lives here, so the
 engine behaviour is adjustable in ONE place:

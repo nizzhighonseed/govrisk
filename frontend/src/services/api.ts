@@ -1,21 +1,21 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 function getAccessToken(): string | null {
-  return localStorage.getItem('govrisk_access_token');
+  return localStorage.getItem('sankalp_access_token');
 }
 
 function getRefreshToken(): string | null {
-  return localStorage.getItem('govrisk_refresh_token');
+  return localStorage.getItem('sankalp_refresh_token');
 }
 
 function setTokens(access: string, refresh: string) {
-  localStorage.setItem('govrisk_access_token', access);
-  localStorage.setItem('govrisk_refresh_token', refresh);
+  localStorage.setItem('sankalp_access_token', access);
+  localStorage.setItem('sankalp_refresh_token', refresh);
 }
 
 function clearTokens() {
-  localStorage.removeItem('govrisk_access_token');
-  localStorage.removeItem('govrisk_refresh_token');
+  localStorage.removeItem('sankalp_access_token');
+  localStorage.removeItem('sankalp_refresh_token');
 }
 
 let isRefreshing = false;

@@ -52,7 +52,7 @@ export default function Alerts() {
           {t('alerts.title')}
         </h1>
         <p className="mt-1 text-sm text-gray-500 lg:text-base">
-          {t('alerts.subtitle')}
+          Potential project risks detected by GovRisk
         </p>
       </div>
 

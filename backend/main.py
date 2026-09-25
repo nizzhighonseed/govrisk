@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="GovRisk API",
+    title="Sankalp API",
     description="AI-Powered Infrastructure Risk Intelligence Platform",
     version="0.2.0",
     lifespan=lifespan,
@@ -76,4 +76,4 @@ app.include_router(ai.router)
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "service": "govrisk-api"}
+    return {"status": "ok", "service": "sankalp-api"}

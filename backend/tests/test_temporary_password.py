@@ -17,7 +17,7 @@ Covers:
 
 All HTTP tests run against isolated temp databases (same pattern as
 test_auth_security / test_registration_governance); the developer's
-govrisk.db / auth.db are never written. The in-process rate limiter is reset
+sankalp.db / auth.db are never written. The in-process rate limiter is reset
 before every test.
 """
 
@@ -56,7 +56,7 @@ def _patch_temp_dbs():
     import models  # noqa: F401 - register metadata on Base
     import auth.models  # noqa: F401 - register metadata on AuthBase
 
-    tmpdir = tempfile.mkdtemp(prefix="govrisk-temppw-")
+    tmpdir = tempfile.mkdtemp(prefix="sankalp-temppw-")
     _TMP_ENGINE = create_engine(
         "sqlite:///" + os.path.join(tmpdir, "test.db"),
         connect_args={"check_same_thread": False},
@@ -171,7 +171,7 @@ class TemporaryPasswordApiTestCase(unittest.TestCase):
     # helpers
     # ------------------------------------------------------------------ #
     def _register(self, email=None, password="testpass123", **extra):
-        email = email or f"tp_{uuid.uuid4().hex[:10]}@govrisk.gov.in"
+        email = email or f"tp_{uuid.uuid4().hex[:10]}@sankalp.gov.in"
         payload = {
             "fullName": "Temp Password Test User",
             "email": email,
@@ -225,7 +225,7 @@ class TemporaryPasswordApiTestCase(unittest.TestCase):
         return email, r.json()["accessToken"]
 
     def _admin_create(self, admin_token, email, role="viewer", extra_payload=None):
-        email = email or f"tp_created_{uuid.uuid4().hex[:10]}@govrisk.gov.in"
+        email = email or f"tp_created_{uuid.uuid4().hex[:10]}@sankalp.gov.in"
         payload = {
             "fullName": "Temporary Account",
             "email": email,

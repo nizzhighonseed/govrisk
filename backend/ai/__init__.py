@@ -1,4 +1,4 @@
-"""GovRisk AI Intelligence Layer.
+"""Sankalp AI Intelligence Layer.
 
 A hybrid early-warning engine that runs alongside the deterministic
 risk engine (services/risk_service.py):

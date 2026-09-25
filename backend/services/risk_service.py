@@ -1200,7 +1200,7 @@ def generate_assistant_response(query: str, db: Session) -> str:
 
     if "hello" in lower or "hi" == lower or lower.startswith("hi "):
         return (
-            "Hello! I'm the **GovRisk AI Assistant**, here to help you analyze "
+            "Hello! I'm the **Sankalp AI Assistant**, here to help you analyze "
             "government infrastructure project risks.\n\n"
             f"I'm currently monitoring **{len(projects)} projects** across the portfolio.\n\n"
             "I can help you with:\n"

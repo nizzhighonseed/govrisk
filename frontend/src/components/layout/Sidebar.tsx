@@ -83,7 +83,7 @@ export default function BottomBar() {
   const { t } = useI18n();
   const navigate = useNavigate();
 
-  const displayName = user?.fullName || t('nav.govRiskUser');
+  const displayName = user?.fullName || "GovRisk User";
 
   const handleLogout = () => {
     logout();
